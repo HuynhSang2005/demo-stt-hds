@@ -97,7 +97,7 @@ class AudioProcessingLogger:
             "asr_processing_start",
             audio_duration=audio_duration,
             sample_rate=sample_rate,
-            event="asr_start"
+            event_type="asr_start"
         )
     
     def log_asr_success(self, text: str, confidence: float, processing_time: float, 
@@ -109,7 +109,7 @@ class AudioProcessingLogger:
             confidence=confidence,
             processing_time=processing_time,
             real_time_factor=real_time_factor,
-            event="asr_success"
+            event_type="asr_success"
         )
     
     def log_asr_error(self, error: str, processing_time: float) -> None:
@@ -118,7 +118,7 @@ class AudioProcessingLogger:
             "asr_processing_error",
             error=error,
             processing_time=processing_time,
-            event="asr_error"
+            event_type="asr_error"
         )
     
     def log_classification_start(self, text_length: int) -> None:
@@ -126,7 +126,7 @@ class AudioProcessingLogger:
         self.logger.info(
             "classification_processing_start",
             text_length=text_length,
-            event="classification_start"
+            event_type="classification_start"
         )
     
     def log_classification_success(self, text: str, label: str, confidence: float, 
@@ -139,7 +139,7 @@ class AudioProcessingLogger:
             confidence=confidence,
             warning=warning,
             processing_time=processing_time,
-            event="classification_success"
+            event_type="classification_success"
         )
     
     def log_classification_error(self, error: str, processing_time: float) -> None:
@@ -148,7 +148,7 @@ class AudioProcessingLogger:
             "classification_processing_error",
             error=error,
             processing_time=processing_time,
-            event="classification_error"
+            event_type="classification_error"
         )
     
     def log_pipeline_success(self, total_processing_time: float, audio_duration: float,
@@ -161,7 +161,7 @@ class AudioProcessingLogger:
             asr_processing_time=asr_time,
             classification_processing_time=classification_time,
             pipeline_real_time_factor=total_processing_time / audio_duration if audio_duration > 0 else 0,
-            event="pipeline_success"
+            event_type="pipeline_success"
         )
     
     def log_websocket_connection(self, client_id: Optional[str] = None) -> None:
@@ -169,7 +169,7 @@ class AudioProcessingLogger:
         self.logger.info(
             "websocket_connection",
             client_id=client_id,
-            event="websocket_connect"
+            event_type="websocket_connect"
         )
     
     def log_websocket_disconnection(self, client_id: Optional[str] = None, reason: Optional[str] = None) -> None:
@@ -178,7 +178,7 @@ class AudioProcessingLogger:
             "websocket_disconnection", 
             client_id=client_id,
             reason=reason,
-            event="websocket_disconnect"
+            event_type="websocket_disconnect"
         )
     
     def log_audio_chunk_received(self, chunk_size: int, chunk_duration: Optional[float] = None) -> None:
@@ -187,7 +187,7 @@ class AudioProcessingLogger:
             "audio_chunk_received",
             chunk_size=chunk_size,
             chunk_duration=chunk_duration,
-            event="audio_chunk"
+            event_type="audio_chunk"
         )
 
 
@@ -205,7 +205,7 @@ class WebSocketLogger:
         self.logger.info(
             "websocket_connection_attempt",
             client_host=client_host,
-            event="ws_connection_start"
+            event_type="ws_connection_start"
         )
     
     def log_connection_accepted(self, client_host: Optional[str] = None) -> None:
@@ -213,7 +213,7 @@ class WebSocketLogger:
         self.logger.info(
             "websocket_connection_accepted",
             client_host=client_host,
-            event="ws_connection_accepted"
+            event_type="ws_connection_accepted"
         )
     
     def log_message_sent(self, message_type: str, message_size: int) -> None:
@@ -222,7 +222,7 @@ class WebSocketLogger:
             "websocket_message_sent",
             message_type=message_type,
             message_size=message_size,
-            event="ws_message_sent"
+            event_type="ws_message_sent"
         )
     
     def log_message_received(self, message_type: str, message_size: int) -> None:
@@ -231,7 +231,7 @@ class WebSocketLogger:
             "websocket_message_received",
             message_type=message_type,
             message_size=message_size,
-            event="ws_message_received"
+            event_type="ws_message_received"
         )
     
     def log_error(self, error: str, error_type: Optional[str] = None) -> None:
@@ -240,7 +240,7 @@ class WebSocketLogger:
             "websocket_error",
             error=error,
             error_type=error_type,
-            event="ws_error"
+            event_type="ws_error"
         )
 
 
@@ -256,16 +256,16 @@ class AppLogger:
     def log_startup(self, config: Dict[str, Any]) -> None:
         """Log application startup"""
         self.logger.info(
-            "application_startup",
+            "Application startup",
             config=config,
-            event="app_startup"
+            event_type="app_startup"
         )
     
     def log_shutdown(self) -> None:
         """Log application shutdown"""
         self.logger.info(
-            "application_shutdown",
-            event="app_shutdown"
+            "Application shutdown",
+            event_type="app_shutdown"
         )
     
     def log_model_loading_start(self, model_type: str, model_path: str) -> None:
@@ -274,7 +274,7 @@ class AppLogger:
             "model_loading_start",
             model_type=model_type,
             model_path=model_path,
-            event="model_loading_start"
+            event_type="model_loading_start"
         )
     
     def log_model_loading_success(self, model_type: str, loading_time: float, 
@@ -285,7 +285,7 @@ class AppLogger:
             model_type=model_type,
             loading_time=loading_time,
             model_parameters=model_params,
-            event="model_loading_success"
+            event_type="model_loading_success"
         )
     
     def log_model_loading_error(self, model_type: str, error: str, loading_time: float) -> None:
@@ -295,7 +295,7 @@ class AppLogger:
             model_type=model_type,
             error=error,
             loading_time=loading_time,
-            event="model_loading_error"
+            event_type="model_loading_error"
         )
 
 

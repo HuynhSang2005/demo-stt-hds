@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     
     # Audio Processing Settings
     AUDIO_CHUNK_DURATION: float = Field(default=2.0, description="Audio chunk duration in seconds")
+    MIN_AUDIO_DURATION: float = Field(default=0.1, description="Minimum audio duration in seconds")
     MAX_AUDIO_DURATION: float = Field(default=30.0, description="Maximum audio duration in seconds")
     TARGET_SAMPLE_RATE: int = Field(default=16000, description="Target sample rate for ASR")
     
