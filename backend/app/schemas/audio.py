@@ -46,11 +46,11 @@ class TranscriptResult(BaseModel):
     all_sentiment_scores: Optional[Dict[str, float]] = None
     
     # Timestamps
-    timestamp: Optional[datetime] = None
+    timestamp: Optional[float] = None  # Unix timestamp (seconds since epoch)
     
     def __init__(self, **data):
         if 'timestamp' not in data:
-            data['timestamp'] = datetime.now()
+            data['timestamp'] = datetime.now().timestamp()
         super().__init__(**data)
 
 class ErrorResponse(BaseModel):

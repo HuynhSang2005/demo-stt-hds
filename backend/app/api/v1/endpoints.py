@@ -138,59 +138,40 @@ class ConnectionManager:
 connection_manager = ConnectionManager()
 
 @router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    settings: Settings = Depends(get_settings)
-):
+async def websocket_endpoint(websocket: WebSocket):
     """
-    Main WebSocket endpoint for real-time audio processing
-    
-    Protocol:
-    1. Client connects → Server sends connection_status
-    2. Client sends binary audio chunks
-    3. Server processes audio → sends transcription_result
-    4. On error → Server sends error message
-    5. Client disconnects → cleanup
+    Simplified WebSocket endpoint for debugging
     """
-    client_id: Optional[str] = None
-    audio_processor: Optional[AudioProcessor] = None
-    
     try:
-        # Accept connection
-        client_id = await connection_manager.connect(websocket)
+        print("🔗 WebSocket connection attempt...")
+        await websocket.accept()
+        print("✅ WebSocket accepted")
         
-        # Get audio processor from global instance
-        from app.main import audio_processor
+        # Send simple status message
+        await websocket.send_json({"status": "connected", "message": "WebSocket ready"})
+        print("📤 Sent status message")
         
-        if audio_processor is None:
-            error_response = create_error_response(
-                error_type="server_not_ready",
-                message="Audio processor not initialized"
-            )
-            await connection_manager.send_error(websocket, error_response)
-            return
+        while True:
+            try:
+                # Receive any data
+                data = await websocket.receive_bytes()
+                print(f"📩 Received {len(data)} bytes")
+                
+                # Send back simple response (just echo info, no processing)
+                response = {
+                    "text": "Debug response - no processing",
+                    "bytes_received": len(data),
+                    "status": "debug_mode"
+                }
+                
+                await websocket.send_json(response)
+                print(f"📤 Sent response: {response}")
+                
+            except Exception as loop_error:
+                print(f"❌ WebSocket loop error: {loop_error}")
+                break
         
-        # Send initial connection status
-        initial_status = ConnectionStatus(
-            status="connected",
-            client_id=client_id,
-            server_info={
-                "version": settings.VERSION,
-                "asr_model": settings.ASR_MODEL_PATH,
-                "classifier_model": settings.CLASSIFIER_MODEL_PATH,
-                "target_sample_rate": settings.TARGET_SAMPLE_RATE
-            }
-        )
-        await connection_manager.send_status(websocket, initial_status)
-        
-        # Send ready status
-        ready_status = ConnectionStatus(
-            status="ready", 
-            client_id=client_id
-        )
-        await connection_manager.send_status(websocket, ready_status)
-        
-        websocket_logger.log_websocket_connection(client_id=client_id)
+        # Debug mode - simple connection
         
         # Main processing loop
         while True:
@@ -215,8 +196,21 @@ async def websocket_endpoint(
                 # Process audio chunk
                 processing_start = time.time()
                 
-                # Use safe processing wrapper
-                result = audio_processor.process_audio_chunk_safe(audio_data)
+                try:
+                    print(f"🔄 Processing {len(audio_data)} bytes audio...")
+                    # Use safe processing wrapper
+                    result = audio_processor.process_audio_chunk_safe(audio_data)
+                    print(f"✅ Processing result: {type(result)}")
+                except Exception as process_error:
+                    print(f"❌ Processing error: {process_error}")
+                    import traceback
+                    traceback.print_exc()
+                    error_response = create_error_response(
+                        error_type="processing_failed",
+                        message=f"Audio processing failed: {str(process_error)}"
+                    )
+                    await connection_manager.send_error(websocket, error_response)
+                    continue
                 
                 processing_time = time.time() - processing_start
                 

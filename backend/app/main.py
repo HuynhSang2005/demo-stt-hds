@@ -26,7 +26,7 @@ import uvicorn
 from .core.config import Settings, get_settings, print_model_status
 from .core.logger import configure_structlog, AppLogger, WebSocketLogger
 from .services.audio_processor import get_audio_processor, AudioProcessor
-from .api.v1.endpoints import router as websocket_router
+from .api.v1.endpoints_simple import router as websocket_router
 
 # Initialize settings
 settings = get_settings()
