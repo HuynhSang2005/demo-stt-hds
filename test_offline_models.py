@@ -118,3 +118,6 @@ if __name__ == "__main__":
     success = test_offline_model_loading()
     if not success:
         sys.exit(1)
+        
+    print("\n🎯 PROMPT 1.2 HOÀN THÀNH!")
+    print("📋 Tiếp theo: Prompt 2.1 - Tạo class LocalWav2Vec2ASR")
