@@ -121,7 +121,51 @@
 > └── package.json
 > ```
 > - Cài: `react`, `vite`, `zustand`, `wavesurfer.js`, `@radix-ui/react-*`, `shadcn-ui`
-> - Không cài `axios` (chỉ dùng WebSocket)"
+> - Không cài đặt `axios` (chỉ dùng WebSocket)"
+
+### ⚠️ FE: Zod v4 + folder-pattern rules (MANDATORY)
+
+- Thêm dependency `zod` (v4) và `@hookform/resolvers` vào `frontend/package.json`.
+- Sử dụng Zod v4 cho runtime schema validation và infer types cho TypeScript.
+- Pattern bắt buộc về file/folder:
+	- `src/schemas/` → mỗi file chứa 1 Zod schema (ví dụ `transcript.schema.ts` exporting `TranscriptSchema`).
+	- `src/types/` hoặc `src/interfaces/` → mỗi file chứa 1 TypeScript type/interface. Không định nghĩa types trong cùng file với schema. Ví dụ: `src/types/transcript.ts` có `export type Transcript = z.infer<typeof TranscriptSchema>`.
+	- Không gom nhiều schema/type vào một file.
+
+### 🔗 React Hook Form + Zod (recommended integration)
+
+- Install: `npm i react-hook-form @hookform/resolvers zod`
+- Usage pattern:
+	- define schema in `src/schemas/transcript.schema.ts`:
+		```ts
+		import { z } from 'zod'
+		export const TranscriptSchema = z.object({
+			text: z.string(),
+			label: z.enum(['positive','negative','neutral','toxic']),
+			confidence: z.number().min(0).max(1),
+			timestamp: z.number().optional()
+		})
+		```
+	- infer types in `src/types/transcript.ts`:
+		```ts
+		import { z } from 'zod'
+		import { TranscriptSchema } from '../schemas/transcript.schema'
+		export type Transcript = z.infer<typeof TranscriptSchema>
+		```
+	- use in component with react-hook-form:
+		```ts
+		const form = useForm({ resolver: zodResolver(TranscriptSchema) })
+		```
+
+### 🎨 Shadcn UI guidance (templates & components)
+
+- Use official site `https://ui.shadcn.com/docs` to pick components and templates.
+- Recommended components for this project: `Badge`, `Alert`, `Toast`, `List`, `Card`, `Button`, `Form` components.
+- Keep UI wrappers in `src/components/ui/` so you can swap underlying implementations easily.
+
+### 🔎 Research rule for AI agent
+
+- BEFORE making FE changes, the AI agent must research and cite official docs (Zod v4 API, React Hook Form + Zod resolver, Shadcn UI components) in the commit/PR description. Include minimal usage snippets where helpful.
 
 ### ✅ Prompt 3.2 – Hook ghi âm real-time
 > "Viết `useAudioRecorder.ts`:
@@ -163,7 +207,7 @@
 > 4. Nhấn 'Start Recording'
 > 5. Nói: 'Đồ ngốc, mày thật là tệ!'
 > 6. Kiểm tra:
->    - FE hiển thị text gần đúng
+>    - FE hiển thị text phải đúng
 >    - Có badge 'toxic' màu đỏ
 >    - Latency < 2.5s
 > 7. Log BE không có lỗi decode"
@@ -172,7 +216,7 @@
 > "Tạo `README.md` ở root:
 > - Tiêu đề: 'Demo Local: Speech-to-Text + Phát hiện nội dung độc hại (Tiếng Việt)'
 > - Mục 'Yêu cầu':
->   - Python 3.9+, Node 18+
+>   - Python 3.11+, Node 22+
 >   - Đã clone 2 model vào `./models/`
 > - Mục 'Cách chạy':
 >   ```bash
@@ -197,7 +241,6 @@
 - Gọi Hugging Face Hub
 - Dùng librosa (phải dùng torchaudio)
 - Dùng Axios hoặc REST API
-- Deploy thương mại
 
 ## ✅ HOÀN THÀNH KHI
 - [ ] Chạy local không cần internet
