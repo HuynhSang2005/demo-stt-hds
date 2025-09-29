@@ -242,6 +242,15 @@ class WebSocketLogger:
             error_type=error_type,
             event_type="ws_error"
         )
+    
+    def log_websocket_disconnection(self, client_id: Optional[str] = None, reason: Optional[str] = None) -> None:
+        """Log WebSocket disconnection"""
+        self.logger.info(
+            "websocket_disconnection", 
+            client_id=client_id,
+            reason=reason,
+            event_type="ws_disconnect"
+        )
 
 
 class AppLogger:

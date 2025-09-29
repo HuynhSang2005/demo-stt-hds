@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 import uvicorn
 
 # Backend imports
@@ -118,15 +119,46 @@ async def lifespan(app: FastAPI):
         app_logger.log_shutdown()
         print("🛑 FASTAPI BACKEND SHUTDOWN COMPLETE")
 
-# Create FastAPI application
+# Custom operation ID generator for cleaner client method names
+def custom_generate_unique_id(route) -> str:
+    """
+    Generate clean operation IDs for better client SDK method names
+    Format: {tag}-{function_name} or just {function_name} if no tags
+    """
+    if route.tags:
+        # Use first tag + function name for cleaner method names
+        return f"{route.tags[0]}_{route.name}"
+    return route.name
+
+# Create FastAPI application with optimized OpenAPI generation
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.DESCRIPTION,
     version=settings.VERSION,
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
-    openapi_url="/openapi.json" if settings.DEBUG else None,
-    lifespan=lifespan
+    openapi_url="/openapi.json",  # Always available for client generation
+    lifespan=lifespan,
+    generate_unique_id_function=custom_generate_unique_id,
+    # Enhanced metadata for better OpenAPI docs
+    contact={
+        "name": "Vietnamese STT API",
+        "email": "dev@example.com",
+    },
+    license_info={
+        "name": "MIT",
+        "identifier": "MIT",
+    },
+    servers=[
+        {
+            "url": f"http://{settings.HOST}:{settings.PORT}",
+            "description": "Development server"
+        },
+        {
+            "url": f"ws://{settings.HOST}:{settings.PORT}",
+            "description": "WebSocket server"
+        }
+    ]
 )
 
 # CORS middleware
@@ -178,6 +210,10 @@ app.include_router(
     prefix=settings.API_V1_STR,
     tags=["WebSocket Audio Processing"]
 )
+
+# Include REST API router
+from .api.v1.rest_endpoints import router as rest_router
+app.include_router(rest_router)
 
 # Root endpoint
 @app.get("/")

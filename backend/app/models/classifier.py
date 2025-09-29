@@ -82,6 +82,10 @@ class LocalPhoBERTClassifier:
         self.classifier: Optional[Any] = None
         self.is_loaded = False
         
+        # Determine device for optimal performance
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device_id = 0 if torch.cuda.is_available() else -1  # GPU:0 or CPU:-1 for pipeline
+        
         # Label mapping từ research đã confirm
         self.label_mapping = {
             "LABEL_0": "positive",
@@ -130,18 +134,19 @@ class LocalPhoBERTClassifier:
                 use_auth_token=False
             )
             
-            # Tạo classifier pipeline
+            # Tạo classifier pipeline with optimal device
             self.classifier = pipeline(
                 "text-classification",
                 model=self.model,
                 tokenizer=self.tokenizer,
                 return_all_scores=True,  # Trả về all class scores
-                device=-1  # CPU only for consistency
+                device=self.device_id  # Use GPU if available, else CPU
             )
             
-            # Set model to eval mode
+            # Set model to eval mode and move to device
             if self.model is not None:
                 self.model.eval()
+                self.model = self.model.to(self.device)
             
             self.is_loaded = True
             

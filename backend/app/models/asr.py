@@ -80,6 +80,12 @@ class LocalWav2Vec2ASR:
         self.target_sample_rate = 16000  # Wav2Vec2 requires 16kHz
         self.is_loaded = False
         
+        # Pre-create reusable resample transform cache (expensive to create each time)
+        self._resampler_cache = {}
+        
+        # Determine device for optimal performance
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         # Load model during initialization
         self._load_model()
     
@@ -117,8 +123,10 @@ class LocalWav2Vec2ASR:
                 use_auth_token=False
             )
             
-            # Đặt model về eval mode cho inference
+            # Đặt model về eval mode cho inference và move to device
             self.model.eval()
+            # Move model to device - type: ignore due to transformers library type inference issue
+            self.model = self.model.to(self.device)  # type: ignore[assignment]
             
             self.is_loaded = True
             
@@ -172,6 +180,7 @@ class LocalWav2Vec2ASR:
     def _preprocess_audio(self, waveform: torch.Tensor, sample_rate: int) -> torch.Tensor:
         """
         Preprocess audio: handle mono/stereo, resample, normalize
+        Optimized for real-time performance with cached resamplers
         
         Args:
             waveform: Input audio tensor
@@ -194,7 +203,7 @@ class LocalWav2Vec2ASR:
             if waveform.dim() > 1:
                 waveform = waveform.squeeze()
             
-            # Resample về 16kHz nếu cần
+            # Resample về 16kHz nếu cần với cached resampler
             if sample_rate != self.target_sample_rate:
                 self.audio_logger.logger.debug(
                     "audio_preprocessing",
@@ -202,13 +211,21 @@ class LocalWav2Vec2ASR:
                     original_sample_rate=sample_rate,
                     target_sample_rate=self.target_sample_rate
                 )
-                waveform = torchaudio.functional.resample(
-                    waveform, 
-                    orig_freq=sample_rate, 
-                    new_freq=self.target_sample_rate
-                )
+                
+                # Use cached resampler for better performance
+                resampler_key = (sample_rate, self.target_sample_rate)
+                if resampler_key not in self._resampler_cache:
+                    self._resampler_cache[resampler_key] = torchaudio.transforms.Resample(
+                        orig_freq=sample_rate,
+                        new_freq=self.target_sample_rate
+                    ).to(self.device)
+                
+                resampler = self._resampler_cache[resampler_key]
+                waveform = resampler(waveform.to(self.device))
+            else:
+                waveform = waveform.to(self.device)
             
-            # Normalize audio (clip to [-1, 1] range)
+            # Normalize audio (clip to [-1, 1] range) - in-place for memory efficiency
             max_amplitude = torch.max(torch.abs(waveform))
             if max_amplitude > 1.0:
                 self.audio_logger.logger.debug(
@@ -216,10 +233,10 @@ class LocalWav2Vec2ASR:
                     operation="normalize",
                     original_max_amplitude=max_amplitude.item()
                 )
-                waveform = waveform / max_amplitude
+                waveform.div_(max_amplitude)  # In-place division
             
-            # Remove DC offset  
-            waveform = waveform - torch.mean(waveform)
+            # Remove DC offset - in-place
+            waveform.sub_(torch.mean(waveform))  # In-place subtraction
             
             return waveform
             
@@ -301,9 +318,9 @@ class LocalWav2Vec2ASR:
                 padding=True
             )
             
-            # Inference với model
-            with torch.no_grad():
-                logits = self.model(inputs.input_values).logits
+            # Inference với model - torch.inference_mode() faster than no_grad()
+            with torch.inference_mode():
+                logits = self.model(inputs.input_values.to(self.device)).logits
             
             # Decode predictions
             predicted_ids = torch.argmax(logits, dim=-1)
@@ -397,9 +414,9 @@ class LocalWav2Vec2ASR:
                 padding=True
             )
             
-            # Model inference
-            with torch.no_grad():
-                logits = self.model(inputs.input_values).logits
+            # Model inference - torch.inference_mode() faster than no_grad()
+            with torch.inference_mode():
+                logits = self.model(inputs.input_values.to(self.device)).logits
             
             # Decode predictions
             predicted_ids = torch.argmax(logits, dim=-1)

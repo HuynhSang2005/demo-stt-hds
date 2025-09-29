@@ -138,14 +138,24 @@ class ConnectionManager:
 connection_manager = ConnectionManager()
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    audio_processor: AudioProcessor = Depends(get_audio_processor)
+):
     """
-    Simplified WebSocket endpoint for debugging
+    Real-time WebSocket endpoint for audio processing
     """
+    # Generate unique client ID for this connection
+    import uuid
+    client_id = str(uuid.uuid4())
+    
     try:
-        print("🔗 WebSocket connection attempt...")
+        print(f"🔗 WebSocket connection attempt for client {client_id}...")
         await websocket.accept()
-        print("✅ WebSocket accepted")
+        print(f"✅ WebSocket accepted for client {client_id}")
+        
+        # Register connection with manager
+        client_id = await connection_manager.connect(websocket, client_id)
         
         # Send simple status message
         await websocket.send_json({"status": "connected", "message": "WebSocket ready"})
@@ -289,7 +299,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 reason="cleanup"
             )
 
-@router.get("/ws/status")
+@router.get("/ws/status", tags=["websocket"])
 async def get_websocket_status():
     """
     Get WebSocket server status và connection statistics
@@ -334,7 +344,7 @@ async def get_websocket_status():
             }
         )
 
-@router.post("/ws/broadcast")
+@router.post("/ws/broadcast", tags=["websocket"])
 async def broadcast_message(
     message: WebSocketMessage,
     settings: Settings = Depends(get_settings)
@@ -379,7 +389,7 @@ async def broadcast_message(
             }
         )
 
-@router.get("/health")
+@router.get("/health", tags=["health"])
 async def health_check():
     """
     Health check endpoint cho WebSocket service
