@@ -1,0 +1,44 @@
+/* Vietnamese Typography and Language Specific Styles */
+
+.vietnamese-text {
+  font-family: 'Inter', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.7;
+  letter-spacing: 0.025em;
+  font-feature-settings: 'liga' 1, 'kern' 1;
+}
+
+/* Vietnamese font optimization for diacritics */
+.vietnamese-text {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Vietnamese specific text sizing adjustments */
+.vietnamese-text h1,
+.vietnamese-text h2,
+.vietnamese-text h3 {
+  line-height: 1.3;
+  margin-bottom: 1em;
+}
+
+.vietnamese-text p {
+  margin-bottom: 1.2em;
+}
+
+/* Better spacing for Vietnamese punctuation */
+.vietnamese-text {
+  word-spacing: 0.1em;
+}
+
+/* Vietnamese interface translations */
+.vietnamese-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+/* Tone mark optimization */
+.vietnamese-text {
+  font-variant-ligatures: common-ligatures;
+  font-variant-numeric: oldstyle-nums;
+}
