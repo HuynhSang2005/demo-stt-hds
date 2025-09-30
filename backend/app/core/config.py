@@ -32,11 +32,11 @@ class Settings(BaseSettings):
     
     # Model Paths - Offline Local Models
     ASR_MODEL_PATH: str = Field(
-        default="./wav2vec2-base-vietnamese-250h",
+        default="../wav2vec2-base-vietnamese-250h",
         description="Path to local Wav2Vec2 Vietnamese ASR model"
     )
     CLASSIFIER_MODEL_PATH: str = Field(
-        default="./phobert-vi-comment-4class", 
+        default="../phobert-vi-comment-4class", 
         description="Path to local PhoBERT Vietnamese classifier model"
     )
     
@@ -76,7 +76,8 @@ class Settings(BaseSettings):
     class Config:
         """Pydantic configuration"""
         case_sensitive = True
-        env_file = ".env"
+        # Use backend/.env (resolved relative to this file) so running from project root still loads backend env
+        env_file = str(Path(__file__).resolve().parents[2] / ".env")
         env_file_encoding = "utf-8"
         
     def get_model_paths(self) -> dict[str, Path]:
@@ -86,12 +87,15 @@ class Settings(BaseSettings):
         Returns:
             Dictionary với resolved paths cho ASR và Classifier models
         """
-        asr_path = Path(self.ASR_MODEL_PATH).resolve()
-        classifier_path = Path(self.CLASSIFIER_MODEL_PATH).resolve()
-        
+        # Resolve model paths relative to the backend package directory (two parents up)
+        # Defaults like '../wav2vec2-base-vietnamese-250h' are written relative to backend/
+        backend_dir = Path(__file__).resolve().parents[2]
+        asr_path = (backend_dir / Path(self.ASR_MODEL_PATH)).resolve()
+        classifier_path = (backend_dir / Path(self.CLASSIFIER_MODEL_PATH)).resolve()
+
         return {
             "asr": asr_path,
-            "classifier": classifier_path
+            "classifier": classifier_path,
         }
     
     def validate_model_paths(self) -> dict[str, bool]:

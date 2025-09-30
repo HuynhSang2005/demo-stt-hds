@@ -34,9 +34,15 @@ class TranscriptResult(BaseModel):
     # Warning Detection
     warning: bool  # True if toxic or negative
     
+    # Bad Keywords Detection
+    bad_keywords: Optional[List[str]] = None  # List of detected bad words
+    
     # Performance Metrics
     processing_time: float  # seconds
     real_time_factor: float  # processing_time / audio_duration
+    
+    # Session Management
+    session_id: Optional[str] = None  # For session-based processing
     
     # Audio Metadata
     audio_duration: float  # seconds
@@ -184,7 +190,8 @@ def create_transcript_result(
     processing_time: float,
     audio_duration: float,
     sample_rate: int = 16000,
-    all_scores: Optional[Dict[str, float]] = None
+    all_scores: Optional[Dict[str, float]] = None,
+    bad_keywords: Optional[List[str]] = None
 ) -> TranscriptResult:
     """
     Helper function để tạo complete transcript result
@@ -199,6 +206,7 @@ def create_transcript_result(
         audio_duration: Audio duration
         sample_rate: Audio sample rate
         all_scores: All classification scores
+        bad_keywords: List of detected bad words
         
     Returns:
         TranscriptResult instance
@@ -211,6 +219,7 @@ def create_transcript_result(
         sentiment_label=sentiment_label,
         sentiment_confidence=sentiment_confidence,
         warning=warning,
+        bad_keywords=bad_keywords,
         processing_time=processing_time,
         real_time_factor=real_time_factor,
         audio_duration=audio_duration,
@@ -231,9 +240,24 @@ def validate_message_type(msg_type: str) -> bool:
     """Validate WebSocket message type"""
     allowed_types = {
         'audio_chunk', 'transcription_result', 'error', 
-        'connection_status', 'processing_status'
+        'connection_status', 'processing_status',
+        'session_command', 'session_response'  # Session management
     }
     return msg_type in allowed_types
+
+
+class SessionCommand(BaseModel):
+    """WebSocket command for session management"""
+    command: str  # start_session, end_session, get_session_info
+    session_id: Optional[str] = None
+
+
+class SessionResponse(BaseModel):
+    """Response for session-related commands"""
+    success: bool
+    session_id: Optional[str] = None
+    message: Optional[str] = None
+    session_info: Optional[Dict[str, Any]] = None
 
 def validate_connection_status(status: str) -> bool:
     """Validate connection status"""

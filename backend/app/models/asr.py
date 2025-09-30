@@ -72,8 +72,16 @@ class LocalWav2Vec2ASR:
         self.audio_logger = logger or AudioProcessingLogger("asr_model")
         self.app_logger = AppLogger("asr_app")
         
-        # Get model path from settings
-        self.model_path = Path(settings.ASR_MODEL_PATH)
+        # Get model path from settings; prefer resolved path from Settings.get_model_paths()
+        try:
+            resolved = settings.get_model_paths().get("asr")
+            if resolved:
+                self.model_path = Path(resolved)
+            else:
+                self.model_path = Path(settings.ASR_MODEL_PATH)
+        except Exception:
+            # Fallback to raw setting if get_model_paths is unavailable
+            self.model_path = Path(settings.ASR_MODEL_PATH)
         
         self.processor: Optional[Wav2Vec2Processor] = None
         self.model: Optional[Wav2Vec2ForCTC] = None

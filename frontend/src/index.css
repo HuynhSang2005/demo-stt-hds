@@ -1,68 +1,147 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@import "tailwindcss";
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+@theme {
+  --color-transcript-neutral: hsl(210, 40%, 98%);
+  --color-transcript-positive: hsl(142, 76%, 96%);
+  --color-transcript-negative: hsl(25, 95%, 95%);
+  --color-transcript-toxic: hsl(0, 84%, 95%);
+  --color-warning: hsl(38, 92%, 50%);
+  --color-warning-background: hsl(48, 96%, 89%);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --animate-pulse-recording: pulse-recording 1s ease-in-out infinite;
+  --animate-waveform-pulse: waveform-pulse 0.8s ease-in-out infinite;
 }
 
-a {
+/* Vietnamese STT App Custom Styles */
+
+/* Recording pulse animation */
+@keyframes pulse-recording {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.1);
+  }
+}
+
+/* Waveform pulse animation */
+@keyframes waveform-pulse {
+  0%, 100% {
+    transform: scaleY(0.3);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* Transcript entry base styles */
+.transcript-entry {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 0.5rem;
+  transition: all 200ms ease-in-out;
+  background-color: #ffffff;
+}
+
+/* Sentiment-based styling */
+.transcript-entry.positive {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #16a34a;
+}
+
+.transcript-entry.neutral {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+
+.transcript-entry.negative {
+  background-color: #fef3c7;
+  border-color: #fed7aa;
+  color: #d97706;
+}
+
+.transcript-entry.toxic {
+  background-color: #fee2e2;
+  border-color: #fecaca;
+  color: #ef4444;
+}
+
+/* Recording indicator */
+.recording-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  background-color: #ef4444;
+  border-radius: 50%;
+  animation: pulse-recording 1s ease-in-out infinite;
+}
+
+/* Audio waveform bars */
+.waveform-bar {
+  width: 4px;
+  height: 100%;
+  background-color: #3b82f6;
+  border-radius: 2px;
+  animation: waveform-pulse 0.8s ease-in-out infinite;
+}
+
+/* Warning badge */
+.warning-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+  background-color: #ef4444;
+  color: #ffffff;
+  border-radius: 9999px;
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
+/* Record button */
+.btn-record {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
   font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  transition: all 200ms ease-in-out;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+.btn-record:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-1px);
+}
+
+.btn-record:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Vietnamese text styling */
+.vietnamese-text {
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  letter-spacing: 0.025em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .transcript-entry {
+    padding: 0.5rem;
+    font-size: 0.875rem;
   }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+  
+  .btn-record {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
   }
 }

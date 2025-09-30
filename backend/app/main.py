@@ -27,7 +27,7 @@ import uvicorn
 from .core.config import Settings, get_settings, print_model_status
 from .core.logger import configure_structlog, AppLogger, WebSocketLogger
 from .services.audio_processor import get_audio_processor, AudioProcessor
-from .api.v1.endpoints_simple import router as websocket_router
+from .api.v1.endpoints import router as websocket_router  # Use real endpoints, not mock
 
 # Initialize settings
 settings = get_settings()
@@ -52,72 +52,80 @@ async def lifespan(app: FastAPI):
     Handles startup và shutdown events cho model loading
     """
     startup_start = time.time()
-    
+
+    # Log basic startup intent
+    app_logger.log_startup({
+        "service": "fastapi_backend",
+        "version": settings.VERSION,
+        "debug_mode": settings.DEBUG,
+        "asr_model_path": settings.ASR_MODEL_PATH,
+        "classifier_model_path": settings.CLASSIFIER_MODEL_PATH,
+    })
+
+    # Validate model paths before loading
+    validation = settings.validate_model_paths()
+    if not all([
+        validation["asr_exists"],
+        validation["classifier_exists"],
+        validation["asr_has_config"],
+        validation["classifier_has_config"],
+    ]):
+        error_msg = f"Model validation failed: {validation}"
+        app_logger.logger.error("model_validation_failed", validation=validation)
+        raise RuntimeError(error_msg)
+
+    # Initialize audio processor (loads models)
+    app_logger.logger.info("initializing_audio_processor", event_type="startup_models")
+    global audio_processor
+    audio_processor = get_audio_processor(settings)
+
+    # Expose the processor on the FastAPI app state for websocket handlers to use
     try:
-        app_logger.log_startup({
-            "service": "fastapi_backend",
-            "version": settings.VERSION,
-            "debug_mode": settings.DEBUG,
-            "asr_model_path": settings.ASR_MODEL_PATH,
-            "classifier_model_path": settings.CLASSIFIER_MODEL_PATH
-        })
-        
-        # Validate model paths before loading
-        validation = settings.validate_model_paths()
-        if not all([
-            validation["asr_exists"],
-            validation["classifier_exists"], 
-            validation["asr_has_config"],
-            validation["classifier_has_config"]
-        ]):
-            error_msg = f"Model validation failed: {validation}"
-            app_logger.logger.error("model_validation_failed", validation=validation)
-            raise RuntimeError(error_msg)
-        
-        # Initialize audio processor (loads models)
-        app_logger.logger.info("initializing_audio_processor", event_type="startup_models")
-        global audio_processor
-        audio_processor = get_audio_processor(settings)
-        
-        # Verify models loaded successfully
-        model_info = audio_processor.get_model_info()
-        if not model_info.get("processor_ready", False):
-            raise RuntimeError("Audio processor not ready after initialization")
-        
-        startup_time = time.time() - startup_start
-        
-        app_logger.logger.info(
-            "fastapi_startup_complete",
-            startup_time=startup_time,
-            models_loaded=model_info["processor_ready"],
-            asr_parameters=model_info["asr_model"].get("parameters", 0),
-            classifier_parameters=model_info["classifier_model"].get("parameters", 0),
-            event_type="startup_complete"
-        )
-        
-        print("🚀 FASTAPI BACKEND STARTED SUCCESSFULLY!")
-        print(f"   - Startup time: {startup_time:.2f}s")
-        print(f"   - ASR model: {model_info['asr_model']['loaded']}")  
-        print(f"   - Classifier model: {model_info['classifier_model']['loaded']}")
-        print(f"   - WebSocket endpoint: {settings.WEBSOCKET_ENDPOINT}")
-        print(f"   - Server: http://{settings.HOST}:{settings.PORT}")
-        
-        # Application is ready
+        app.state.audio_processor = audio_processor
+    except Exception:
+        app_logger.logger.warning("failed_to_attach_processor_to_app_state")
+
+    # Verify models loaded successfully
+    model_info = audio_processor.get_model_info()
+    if not model_info.get("processor_ready", False):
+        raise RuntimeError("Audio processor not ready after initialization")
+
+    startup_time = time.time() - startup_start
+
+    app_logger.logger.info(
+        "fastapi_startup_complete",
+        startup_time=startup_time,
+        models_loaded=model_info["processor_ready"],
+        asr_parameters=model_info["asr_model"].get("parameters", 0),
+        classifier_parameters=model_info["classifier_model"].get("parameters", 0),
+        event_type="startup_complete",
+    )
+
+    # ASCII-safe startup messages for Windows consoles
+    print("[STARTUP] FASTAPI BACKEND STARTED SUCCESSFULLY")
+    print(f"   - Startup time: {startup_time:.2f}s")
+    print(f"   - ASR model loaded: {model_info['asr_model']['loaded']}")
+    print(f"   - Classifier model loaded: {model_info['classifier_model']['loaded']}")
+    print(f"   - WebSocket endpoint: {settings.WEBSOCKET_ENDPOINT}")
+    print(f"   - Server: http://{settings.HOST}:{settings.PORT}")
+
+    try:
+        # Application is ready; yield control to the server loop
         yield
-        
+
     except Exception as e:
         app_logger.logger.error(
             "fastapi_startup_failed",
             error=str(e),
-            event_type="startup_error"
+            event_type="startup_error",
         )
-        print(f"❌ FASTAPI STARTUP FAILED: {e}")
+        print(f"[ERROR] FASTAPI STARTUP FAILED: {e}")
         raise
-    
+
     finally:
         # Shutdown cleanup
         app_logger.log_shutdown()
-        print("🛑 FASTAPI BACKEND SHUTDOWN COMPLETE")
+        print("[SHUTDOWN] FASTAPI BACKEND SHUTDOWN COMPLETE")
 
 # Custom operation ID generator for cleaner client method names
 def custom_generate_unique_id(route) -> str:
@@ -164,7 +172,8 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    # In DEBUG allow any origin to simplify local testing and avoid WebSocket upgrade 403s
+    allow_origins=["*"] if settings.DEBUG else settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -209,6 +218,14 @@ app.include_router(
     websocket_router,
     prefix=settings.API_V1_STR,
     tags=["WebSocket Audio Processing"]
+)
+
+# Include Session-based WebSocket router
+from .api.v1.session_endpoints import router as session_router
+app.include_router(
+    session_router,
+    prefix=settings.API_V1_STR + "/ws",
+    tags=["Session WebSocket Audio Processing"]
 )
 
 # Include REST API router

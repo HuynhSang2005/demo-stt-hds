@@ -74,8 +74,15 @@ class LocalPhoBERTClassifier:
         self.audio_logger = logger or AudioProcessingLogger("classifier_model")
         self.app_logger = AppLogger("classifier_app")
         
-        # Get model path from settings
-        self.model_path = Path(settings.CLASSIFIER_MODEL_PATH)
+        # Get model path from settings; prefer resolved path from Settings.get_model_paths()
+        try:
+            resolved = settings.get_model_paths().get("classifier")
+            if resolved:
+                self.model_path = Path(resolved)
+            else:
+                self.model_path = Path(settings.CLASSIFIER_MODEL_PATH)
+        except Exception:
+            self.model_path = Path(settings.CLASSIFIER_MODEL_PATH)
         
         self.tokenizer: Optional[Any] = None
         self.model: Optional[Any] = None

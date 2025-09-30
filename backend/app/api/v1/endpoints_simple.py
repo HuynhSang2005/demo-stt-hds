@@ -1,94 +1,85 @@
 #!/usr/bin/env python3
 """
-Simple WebSocket API Endpoints - FastAPI Backend (Debug Version)
-Simplified for debugging WebSocket connection issues
+Simplified WebSocket endpoint for testing connectivity without ML models
 """
 
 from fastapi import APIRouter, WebSocket
-import asyncio
+from fastapi.websockets import WebSocketDisconnect
+import time
+import uuid
+import json
+import logging
 
-# Initialize router
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _build_message(message_type: str, data: dict) -> dict:
+    """Build standardized WebSocket message envelope."""
+    return {
+        "type": message_type,
+        "timestamp": time.time(),
+        "messageId": str(uuid.uuid4()),
+        "data": data
+    }
+
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
-    WebSocket endpoint with audio processing integration
+    Simplified WebSocket endpoint for testing connectivity.
+    
+    Accepts binary audio data and returns mock transcript results
+    to test the full pipeline without heavy ML models.
     """
+    await websocket.accept()
+    logger.info("WebSocket connection accepted")
+    
     try:
-        print("🔗 WebSocket connection attempt...")
-        await websocket.accept()
-        print("✅ WebSocket accepted")
-        
-        # Get audio processor from global instance
-        from app.main import audio_processor
-        
-        if audio_processor is None:
-            await websocket.send_json({
-                "error": "Audio processor not ready",
-                "status": "error"
-            })
-            return
-            
-        # Send ready status
-        await websocket.send_json({"status": "connected", "message": "Vietnamese STT + Toxic Detection ready"})
-        print("📤 Sent status message")
-        
         while True:
+            # Wait for binary audio data
+            audio_data = await websocket.receive_bytes()
+            
             try:
-                # Receive audio data
-                message = await websocket.receive()
+                # Mock processing - simulate transcript result
+                mock_result = {
+                    "transcript": "Xin chào, đây là một thử nghiệm",
+                    "confidence": 0.95,
+                    "language": "vi",
+                    "sentiment": {
+                        "label": "neutral",
+                        "confidence": 0.85,
+                        "is_toxic": False
+                    },
+                    "processing_time": 0.123
+                }
                 
-                # Handle different message types
-                if message['type'] == 'websocket.receive' and 'bytes' in message:
-                    audio_data = message['bytes']
-                    print(f"📩 Received {len(audio_data)} bytes audio")
-                    
-                    if len(audio_data) == 0:
-                        continue
-                    
-                    try:
-                        # Process audio with real pipeline
-                        print("🔄 Processing audio...")
-                        result = audio_processor.process_audio_bytes(audio_data)
-                        
-                        # Convert to dict for JSON response
-                        response = {
-                            "text": result.text,
-                            "label": result.sentiment_label,
-                            "confidence": result.sentiment_confidence,
-                            "is_toxic": result.warning,  # True if toxic/negative
-                            "processing_time": result.processing_time,
-                            "timestamp": result.timestamp
-                        }
-                        
-                        await websocket.send_json(response)
-                        print(f"✅ Sent result: text='{result.text[:50]}...', toxic={result.warning}")
-                        
-                    except Exception as process_error:
-                        print(f"❌ Audio processing error: {process_error}")
-                        # Send error response
-                        error_response = {
-                            "text": "[PROCESSING_ERROR]",
-                            "label": "error", 
-                            "confidence": 0.0,
-                            "is_toxic": False,
-                            "processing_time": 0.0,
-                            "error": str(process_error),
-                            "timestamp": 0
-                        }
-                        await websocket.send_json(error_response)
+                # Send structured response
+                message = _build_message("transcript_result", mock_result)
                 
-            except Exception as loop_error:
-                print(f"❌ WebSocket loop error: {loop_error}")
-                break
+                await websocket.send_text(json.dumps(message))
+                logger.info(f"Mock processed audio data of {len(audio_data)} bytes")
                 
+            except Exception as e:
+                # Send error response
+                error_message = _build_message("error", {
+                    "message": str(e),
+                    "type": "processing_error"
+                })
+                await websocket.send_text(json.dumps(error_message))
+                logger.error(f"Audio processing error: {e}")
+                
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
     except Exception as e:
-        print(f"❌ WebSocket error: {e}")
-        import traceback
-        traceback.print_exc()
-
-@router.get("/status")
-async def websocket_status():
-    """Simple status endpoint"""
-    return {"websocket_status": "available", "endpoint": "/v1/ws"}
+        logger.error(f"WebSocket error: {e}")
+        try:
+            error_message = _build_message("error", {
+                "message": "WebSocket connection error",
+                "type": "connection_error"
+            })
+            await websocket.send_text(json.dumps(error_message))
+        except:
+            pass  # Connection already closed
+    finally:
+        logger.info("WebSocket connection closed")

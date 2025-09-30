@@ -12,9 +12,6 @@ from pathlib import Path
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 
-# Import và run main app
-from app.main import app
-
 if __name__ == "__main__":
     import uvicorn
     
@@ -28,9 +25,9 @@ if __name__ == "__main__":
     print(f"📚 API Docs: http://127.0.0.1:8000/docs")
     print("=" * 70)
     
-    # Run server
+    # Run server using module string to avoid double execution
     uvicorn.run(
-        app,
+        "app.main:app",
         host="127.0.0.1",
         port=8000,
         log_level="info",

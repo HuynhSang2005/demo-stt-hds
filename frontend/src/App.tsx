@@ -1,34 +1,35 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+
+import { VietnameseSTTDashboard } from './components/VietnameseSTTDashboard'
+import { useWarningCleanup } from './stores/vietnameseSTT.store'
+import { config } from './lib/config'
+import type { TranscriptResult } from './types/transcript'
 import './App.css'
+import './styles/vietnamese.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Auto-cleanup recent warnings
+  useWarningCleanup()
+  
+  // Handle export functionality
+  const handleExport = (transcripts: TranscriptResult[]) => {
+    console.log('Exported transcripts:', transcripts.length)
+  }
+  
+  // Handle errors
+  const handleError = (error: Error) => {
+    console.error('Vietnamese STT Error:', error)
+    // Could integrate with error tracking service here
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="App vietnamese-text">
+      <VietnameseSTTDashboard
+        websocketUrl={config.backend.wsUrl}
+        title="Vietnamese Speech-to-Text với Phát hiện Độc hại"
+        onExport={handleExport}
+        onError={handleError}
+      />
+    </div>
   )
 }
 

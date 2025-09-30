@@ -4,7 +4,7 @@ Additional REST API Endpoints for Client Generation Demo
 Demonstrates various HTTP methods and response types
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, Path
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
@@ -195,7 +195,7 @@ async def update_configuration(
 
 @router.get("/models/{model_type}/performance", tags=["models"])
 async def get_model_performance(
-    model_type: str = Field(..., description="Model type (asr or classifier)"),
+    model_type: str = Path(..., description="Model type (asr or classifier)"),
     include_details: bool = Query(False, description="Include detailed performance metrics")
 ):
     """
