@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { Clock, AlertTriangle, Search, Filter, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { 
@@ -70,12 +70,13 @@ const getSentimentStyles = (label: VietnameseSentiment, isWarning: boolean) => {
 
 /**
  * Individual transcript entry component
+ * Task 9: Memoized to prevent unnecessary re-renders
  */
-const TranscriptEntryComponent: React.FC<{
+const TranscriptEntryComponent = React.memo<{
   transcript: TranscriptEntry
   isSelected: boolean
   onSelect: () => void
-}> = ({ transcript, isSelected, onSelect }) => {
+}>(({ transcript, isSelected, onSelect }) => {
   return (
     <div
       onClick={onSelect}
@@ -181,7 +182,20 @@ const TranscriptEntryComponent: React.FC<{
       )}
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Task 9: Custom comparison function for React.memo
+  // Only re-render if transcript content, selection, or warning state changes
+  return (
+    prevProps.transcript.id === nextProps.transcript.id &&
+    prevProps.transcript.text === nextProps.transcript.text &&
+    prevProps.transcript.label === nextProps.transcript.label &&
+    prevProps.transcript.warning === nextProps.transcript.warning &&
+    prevProps.transcript.isProcessing === nextProps.transcript.isProcessing &&
+    prevProps.isSelected === nextProps.isSelected
+  )
+})
+
+TranscriptEntryComponent.displayName = 'TranscriptEntryComponent'
 
 /**
  * Vietnamese STT Transcript Display Component
@@ -211,6 +225,10 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const lastTranscriptCount = useRef(transcripts.length)
   
+  // Task 9: Local state for debounced search input
+  const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
+  const searchDebounceTimer = useRef<number | null>(null)
+  
   // Auto-scroll to bottom when new transcripts arrive
   useEffect(() => {
     if (autoScroll && transcripts.length > lastTranscriptCount.current && containerRef.current) {
@@ -226,10 +244,51 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
     onTranscriptSelect?.(transcript)
   }, [selectTranscript, onTranscriptSelect])
   
-  // Handle search input change
+  // Task 9: Debounced search input handler (300ms delay)
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value)
+    const value = e.target.value
+    setLocalSearchQuery(value)
+    
+    // Clear existing timer
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current)
+    }
+    
+    // Set new timer to update store after 300ms
+    searchDebounceTimer.current = window.setTimeout(() => {
+      setSearchQuery(value)
+    }, 300)
   }, [setSearchQuery])
+  
+  // Task 9: Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current)
+      }
+    }
+  }, [])
+  
+  // Task 9: Memoize filtered transcripts to avoid recalculation on every render
+  const filteredTranscripts = useMemo(() => {
+    let results = transcripts
+    
+    // Apply warning filter
+    if (filterByWarnings) {
+      results = results.filter(t => t.warning)
+    }
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      results = results.filter(t => 
+        t.text.toLowerCase().includes(query) ||
+        t.label.toLowerCase().includes(query)
+      )
+    }
+    
+    return results
+  }, [transcripts, filterByWarnings, searchQuery])
   
   // Handle filter toggle
   const handleFilterToggle = useCallback(() => {
@@ -277,7 +336,7 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
                 <input
                   type="text"
                   placeholder={VIETNAMESE_UI_TEXT.transcripts.searchPlaceholder}
-                  value={searchQuery}
+                  value={localSearchQuery}
                   onChange={handleSearchChange}
                   className={cn(
                     "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm",
@@ -314,20 +373,25 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
         className="overflow-y-auto"
         style={{ maxHeight }}
       >
-        {transcripts.length === 0 ? (
+        {filteredTranscripts.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <Volume2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-lg font-medium mb-2">Chưa có bản ghi nào</p>
+            <p className="text-lg font-medium mb-2">
+              {transcripts.length === 0 ? "Chưa có bản ghi nào" : "Không tìm thấy kết quả"}
+            </p>
             <p className="text-sm">
               {searchQuery ? 
                 `Không tìm thấy kết quả cho "${searchQuery}"` :
-                "Bắt đầu ghi âm để xem kết quả phiên âm"
+                filterByWarnings ?
+                  "Không có cảnh báo nào" :
+                  "Bắt đầu ghi âm để xem kết quả phiên âm"
               }
             </p>
           </div>
         ) : (
           <div className="p-4 space-y-3">
-            {transcripts.map((transcript) => (
+            {/* Task 9: Use filtered and memoized transcripts */}
+            {filteredTranscripts.map((transcript) => (
               <TranscriptEntryComponent
                 key={transcript.id}
                 transcript={transcript}

@@ -232,7 +232,7 @@ const WarningHistory: React.FC<{
               </p>
               
               <div className="mt-2 text-xs text-gray-500">
-                Độ tin cậy: {Math.round(transcript.confidence * 100)}%
+                Độ tin cậy: {!isNaN(transcript.confidence) ? Math.round(transcript.confidence * 100) : 'N/A'}%
               </div>
             </div>
           ))}

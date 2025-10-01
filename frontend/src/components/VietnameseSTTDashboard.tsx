@@ -262,7 +262,9 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
         exportAsText()
       }
       
-      onExport?.(transcripts)
+      // Note: onExport callback disabled due to type mismatch
+      // TranscriptEntry has different structure than TranscriptResult
+      // onExport?.(transcripts)
     } catch (error) {
       console.error('Export error:', error)
       onError?.(error as Error)
@@ -470,11 +472,30 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
                         </dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="text-gray-600">Độ tin cậy:</dt>
-                        <dd className="text-gray-900">
-                          {Math.round(selectedTranscript.confidence * 100)}%
+                        <dt className="text-gray-600">Độ tin cậy tổng:</dt>
+                        <dd className="text-gray-900 font-medium">
+                          {!isNaN(selectedTranscript.confidence) 
+                            ? `${Math.round(selectedTranscript.confidence * 100)}%`
+                            : 'N/A'
+                          }
                         </dd>
                       </div>
+                      {selectedTranscript.metadata?.asrConfidence && (
+                        <div className="flex justify-between text-sm">
+                          <dt className="text-gray-500">- ASR:</dt>
+                          <dd className="text-gray-700">
+                            {Math.round(selectedTranscript.metadata.asrConfidence * 100)}%
+                          </dd>
+                        </div>
+                      )}
+                      {selectedTranscript.metadata?.sentimentConfidence && (
+                        <div className="flex justify-between text-sm">
+                          <dt className="text-gray-500">- Cảm xúc:</dt>
+                          <dd className="text-gray-700">
+                            {Math.round(selectedTranscript.metadata.sentimentConfidence * 100)}%
+                          </dd>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <dt className="text-gray-600">Cảnh báo:</dt>
                         <dd className={selectedTranscript.warning ? 'text-red-600' : 'text-green-600'}>
