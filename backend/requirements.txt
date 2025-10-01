@@ -11,9 +11,15 @@ torchvision==0.16.1        # Vision utilities (nếu cần xử lý spectrogram)
 torchaudio==2.1.1          # Audio processing utilities
 transformers==4.35.2       # Hugging Face transformers cho Wav2Vec2 và PhoBERT
 
+# === ONNX Runtime Optimization (Phase 1) ===
+optimum[onnxruntime]==1.16.0  # Hugging Face Optimum for ONNX export & quantization
+onnxruntime==1.16.3           # ONNX Runtime for 2-4x faster inference
+# onnxruntime-gpu==1.16.3     # GPU accelerated (uncomment if using CUDA)
+
 # === Configuration & Logging ===
 pydantic-settings==2.0.3   # PydanticSettings cho env-based configuration
 structlog==23.2.0          # Structured logging cho production
+psutil==5.9.6             # Task 12: System/process metrics collection
 
 # === WebSocket & Real-time ===
 websockets==12.0           # WebSocket support (included trong fastapi[all] nhưng explicit)
