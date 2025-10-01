@@ -29,7 +29,16 @@ export interface TranscriptEntry {
   warning: boolean
   bad_keywords?: string[]
   isProcessing: boolean
-  metadata?: TranscriptResult['metadata']
+  metadata?: {
+    audioChunkSize?: number
+    processingTime?: number
+    modelVersion?: string
+    realTimeFactor?: number
+    sampleRate?: number
+    audioDuration?: number
+    asrConfidence?: number
+    sentimentConfidence?: number
+  }
 }
 
 /**
@@ -233,34 +242,37 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
       
       // Debug: Log the exact response from backend
       console.log('[STT Store] Raw backend response:', result)
+      console.log('  ↳ ASR confidence:', result.asr_confidence)
+      console.log('  ↳ Sentiment confidence:', result.sentiment_confidence)
+      console.log('  ↳ Sentiment label:', result.sentiment_label)
       
       const transcriptId = generateId()
       
-      // Handle backend field mapping - backend uses different field names
-      const mappedResult = {
-        text: result.text,
-        label: (result as any).sentiment_label || result.label,
-        confidence: (result as any).sentiment_confidence || result.confidence,
-        warning: result.warning,
-        bad_keywords: result.bad_keywords,
-        metadata: result.metadata
-      }
+      // FIXED: Use correct backend field names (no type casting needed)
+      const isWarning = isWarningContent(result.sentiment_label)
       
-      console.log('[STT Store] Mapped result:', mappedResult)
-      
-      const isWarning = isWarningContent(mappedResult.label)
+      // Calculate overall confidence (ASR 60% + Sentiment 40%)
+      const overallConfidence = (result.asr_confidence * 0.6) + (result.sentiment_confidence * 0.4)
+      console.log('  ↳ Overall confidence:', `${(overallConfidence * 100).toFixed(1)}% = (${result.asr_confidence} * 0.6) + (${result.sentiment_confidence} * 0.4)`)
       
       const entry: TranscriptEntry = {
         id: transcriptId,
         sessionId: state.currentSession.id,
         timestamp: Date.now(),
-        text: mappedResult.text,
-        label: mappedResult.label,
-        confidence: mappedResult.confidence,
+        text: result.text,
+        label: result.sentiment_label, // FIXED: correct field name
+        confidence: overallConfidence, // FIXED: calculated weighted average
         warning: isWarning,
-        bad_keywords: mappedResult.bad_keywords,
+        bad_keywords: result.bad_keywords,
         isProcessing: false,
-        metadata: mappedResult.metadata,
+        metadata: {
+          processingTime: result.processing_time, // FIXED: backend field name
+          realTimeFactor: result.real_time_factor, // NEW: performance metric
+          sampleRate: result.sample_rate, // NEW: audio metadata
+          audioDuration: result.audio_duration, // NEW: audio metadata
+          asrConfidence: result.asr_confidence, // NEW: separate ASR confidence
+          sentimentConfidence: result.sentiment_confidence, // NEW: separate sentiment confidence
+        },
       }
       
       set((currentState) => ({
@@ -274,7 +286,7 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
           total: currentState.warnings.total + (isWarning ? 1 : 0),
           recent: currentState.warnings.recent + (isWarning ? 1 : 0),
           lastWarningTime: isWarning ? Date.now() : currentState.warnings.lastWarningTime,
-          criticalWarnings: currentState.warnings.criticalWarnings + (result.label === 'toxic' ? 1 : 0),
+          criticalWarnings: currentState.warnings.criticalWarnings + (result.sentiment_label === 'toxic' ? 1 : 0),
         },
         
         // Update session chunk count
@@ -287,7 +299,7 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
       console.log('[STT Store] Added transcript:', {
         id: transcriptId,
         text: (result.text || '').substring(0, 50) + ((result.text || '').length > 50 ? '...' : ''),
-        label: result.label,
+        label: result.sentiment_label,
         warning: isWarning,
       })
       
