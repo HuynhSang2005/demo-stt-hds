@@ -72,14 +72,19 @@ export interface UseWebSocketOptions extends Partial<WebSocketEventHandlers> {
 
 /**
  * Internal connection state tracking
+ * Task 8: Enhanced with health check and request queue support
  */
 interface ConnectionState {
   socket: WebSocket | null
   reconnectAttempts: number
   reconnectTimer: number | null
   connectionTimer: number | null
+  pingTimer: number | null // Task 8: Ping/pong health check timer
+  lastPingTime: number | null // Task 8: Last ping timestamp
+  lastPongTime: number | null // Task 8: Last pong received
   lastConnectedAt: number | null
   lastDisconnectedAt: number | null
+  requestQueue: Array<{data: ArrayBuffer | string, timestamp: number}> // Task 8: Queue for requests during reconnection
 }
 
 /**
@@ -128,13 +133,18 @@ export function useWebSocket(
   // State for managing transcript results via callback
 
   // Connection state ref (mutable without causing re-renders)
+  // Task 8: Enhanced with ping/pong health checks and request queue
   const connectionStateRef = useRef<ConnectionState>({
     socket: null,
     reconnectAttempts: 0,
     reconnectTimer: null,
     connectionTimer: null,
+    pingTimer: null,
+    lastPingTime: null,
+    lastPongTime: null,
     lastConnectedAt: null,
     lastDisconnectedAt: null,
+    requestQueue: [],
   })
 
   // Ref to store connect function to avoid circular dependencies
@@ -212,16 +222,25 @@ export function useWebSocket(
       debugLog('Parsed message', { type: message.type, message })
 
       // Route message based on type
-      switch (message.type) {
-        case 'transcript_result': {
+      // Note: Backend may send 'transcription_result', we handle both
+      const messageType = message.type as string
+      switch (messageType) {
+        case 'transcript_result':
+        case 'transcription_result': {  // Backend sends 'transcription_result'
           const transcriptMsg = message as TranscriptResultMessage
           try {
+            // Generate ID if backend didn't provide one
+            const transcriptData = transcriptMsg.data
+            if (!transcriptData.id) {
+              transcriptData.id = `transcript-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            }
+            
             // Transcript handled via callback - no internal state needed
-            onTranscriptResult?.(transcriptMsg.data)
+            onTranscriptResult?.(transcriptData)
             debugLog('Transcript result processed successfully', {
-              text: transcriptMsg.data.text?.substring(0, 30) + '...',
-              label: transcriptMsg.data.label,
-              warning: transcriptMsg.data.warning
+              text: transcriptData.text?.substring(0, 30) + '...',
+              label: transcriptData.sentiment_label,
+              warning: transcriptData.warning
             })
           } catch (callbackError) {
             debugLog('Error in transcript result callback', {
@@ -249,6 +268,15 @@ export function useWebSocket(
           break
         }
 
+        case 'pong': {
+          // Task 8: Handle pong response for health check
+          const state = connectionStateRef.current
+          state.lastPongTime = Date.now()
+          const latency = message.timestamp ? state.lastPongTime - (message.timestamp as number) : 0
+          debugLog('Health check pong received', { latency })
+          break
+        }
+
         default:
           debugLog('Unknown message type', { type: (message as Record<string, unknown>).type })
           onMessage?.(message)
@@ -266,6 +294,7 @@ export function useWebSocket(
         type: 'error',
         timestamp: Date.now(),
         data: {
+          error: wsError.code,
           code: wsError.code,
           message: wsError.message,
           details: wsError.details
@@ -276,10 +305,13 @@ export function useWebSocket(
 
   /**
    * Calculate reconnect delay with exponential backoff
+   * Task 8: Enhanced jitter calculation (10-30% range for better distribution)
    */
   const calculateReconnectDelay = useCallback((attempt: number): number => {
     if (!exponentialBackoff) {
-      return reconnectDelay
+      // Task 8: Add jitter even for fixed delays
+      const jitter = reconnectDelay * (0.1 + Math.random() * 0.2) // 10-30% jitter
+      return Math.floor(reconnectDelay + jitter)
     }
 
     const delay = Math.min(
@@ -287,8 +319,8 @@ export function useWebSocket(
       maxReconnectDelay
     )
     
-    // Add jitter to prevent thundering herd
-    const jitter = delay * 0.1 * Math.random()
+    // Task 8: Enhanced jitter calculation - 10-30% random variation
+    const jitter = delay * (0.1 + Math.random() * 0.2)
     return Math.floor(delay + jitter)
   }, [exponentialBackoff, reconnectDelay, maxReconnectDelay])
 
@@ -349,6 +381,89 @@ export function useWebSocket(
   }, [])
 
   /**
+   * Task 8: Clear ping health check timer
+   */
+  const clearPingTimer = useCallback(() => {
+    const state = connectionStateRef.current
+    if (state.pingTimer) {
+      clearInterval(state.pingTimer)
+      state.pingTimer = null
+    }
+  }, [])
+
+  /**
+   * Task 8: Start ping/pong health check mechanism
+   * Sends ping every 30s, expects pong within 10s
+   */
+  const startHealthCheck = useCallback(() => {
+    const state = connectionStateRef.current
+    const PING_INTERVAL = 30000 // 30 seconds
+    const PONG_TIMEOUT = 10000   // 10 seconds
+
+    clearPingTimer()
+
+    state.pingTimer = setInterval(() => {
+      if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+        clearPingTimer()
+        return
+      }
+
+      const now = Date.now()
+      
+      // Check if last pong is too old (connection might be dead)
+      if (state.lastPongTime && (now - state.lastPongTime > PING_INTERVAL + PONG_TIMEOUT)) {
+        debugLog('Health check failed - no pong received, reconnecting')
+        clearPingTimer()
+        state.socket.close()
+        return
+      }
+
+      // Send ping message
+      try {
+        state.socket.send(JSON.stringify({ type: 'ping', timestamp: now }))
+        state.lastPingTime = now
+        debugLog('Health check ping sent')
+      } catch (error) {
+        debugLog('Failed to send ping', { error })
+        clearPingTimer()
+      }
+    }, PING_INTERVAL) as ReturnType<typeof setInterval>
+
+    // Initialize pong time on first connection
+    state.lastPongTime = Date.now()
+  }, [debugLog, clearPingTimer])
+
+  /**
+   * Task 8: Process request queue after reconnection
+   */
+  const processRequestQueue = useCallback(() => {
+    const state = connectionStateRef.current
+    
+    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    if (state.requestQueue.length === 0) {
+      return
+    }
+
+    debugLog(`Processing ${state.requestQueue.length} queued requests`)
+
+    // Send all queued requests
+    const queue = [...state.requestQueue]
+    state.requestQueue = []
+
+    queue.forEach(({ data, timestamp }) => {
+      try {
+        state.socket!.send(data)
+        debugLog('Sent queued request', { age: Date.now() - timestamp })
+      } catch (error) {
+        debugLog('Failed to send queued request', { error })
+      }
+    })
+  }, [debugLog])
+
+  /**
    * Connect to WebSocket
    */
   const connect = useCallback(() => {
@@ -405,6 +520,12 @@ export function useWebSocket(
         // Clear any previous errors when connection succeeds
         setLastError(null)
         
+        // Task 8: Start health check mechanism
+        startHealthCheck()
+        
+        // Task 8: Process any queued requests from disconnection period
+        processRequestQueue()
+        
         updateConnectionStatus('connected')
         onOpen?.(event)
       }
@@ -419,6 +540,7 @@ export function useWebSocket(
         })
 
         clearConnectionTimer()
+        clearPingTimer() // Task 8: Stop health checks
         state.socket = null
         state.lastDisconnectedAt = Date.now()
 
@@ -451,6 +573,7 @@ export function useWebSocket(
           type: 'error',
           timestamp: Date.now(),
           data: {
+            error: wsError.code,
             code: wsError.code,
             message: wsError.message,
             details: wsError.details
@@ -471,6 +594,7 @@ export function useWebSocket(
         type: 'error',
         timestamp: Date.now(),
         data: {
+          error: wsError.code,
           code: wsError.code,
           message: wsError.message,
           details: wsError.details
@@ -500,6 +624,7 @@ export function useWebSocket(
 
   /**
    * Disconnect WebSocket
+   * Task 8: Enhanced with ping timer cleanup and queue clearing
    */
   const disconnect = useCallback(() => {
     debugLog('Disconnecting WebSocket')
@@ -507,6 +632,10 @@ export function useWebSocket(
     const state = connectionStateRef.current
     clearReconnectTimer()
     clearConnectionTimer()
+    clearPingTimer() // Task 8: Clear health check timer
+
+    // Task 8: Clear request queue on manual disconnect
+    state.requestQueue = []
 
     if (state.socket) {
       state.socket.close(1000, 'Client disconnect')
@@ -514,7 +643,7 @@ export function useWebSocket(
     }
 
     updateConnectionStatus('disconnected', 'Manually disconnected')
-  }, [debugLog, clearReconnectTimer, clearConnectionTimer, updateConnectionStatus])
+  }, [debugLog, clearReconnectTimer, clearConnectionTimer, clearPingTimer, updateConnectionStatus])
 
   /**
    * Reconnect WebSocket manually
@@ -528,6 +657,7 @@ export function useWebSocket(
 
   /**
    * Send audio chunk for Vietnamese STT processing
+   * Task 8: Enhanced with request queuing during reconnection
    */
   const sendAudioChunk = useCallback((
     audioData: ArrayBuffer,
@@ -536,11 +666,25 @@ export function useWebSocket(
     const state = connectionStateRef.current
 
     if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
-      debugLog('Cannot send audio chunk - WebSocket not connected', {
-        socketState: state.socket?.readyState,
-        chunkIndex,
-        dataSize: audioData.byteLength
-      })
+      // Task 8: Queue request during reconnection if autoReconnect enabled
+      if (autoReconnect && connectionStatus === 'reconnecting') {
+        const MAX_QUEUE_SIZE = 50 // Limit queue to prevent memory issues
+        if (state.requestQueue.length < MAX_QUEUE_SIZE) {
+          state.requestQueue.push({ data: audioData, timestamp: Date.now() })
+          debugLog('Audio chunk queued during reconnection', {
+            chunkIndex,
+            queueSize: state.requestQueue.length
+          })
+        } else {
+          debugLog('Request queue full, dropping audio chunk', { chunkIndex })
+        }
+      } else {
+        debugLog('Cannot send audio chunk - WebSocket not connected', {
+          socketState: state.socket?.readyState,
+          chunkIndex,
+          dataSize: audioData.byteLength
+        })
+      }
       return
     }
 
@@ -570,13 +714,14 @@ export function useWebSocket(
         type: 'error',
         timestamp: Date.now(),
         data: {
+          error: wsError.code,
           code: wsError.code,
           message: wsError.message,
           details: wsError.details
         }
       })
     }
-  }, [debugLog, createWebSocketError])
+  }, [debugLog, createWebSocketError, autoReconnect, connectionStatus])
 
   /**
    * Send JSON message
@@ -616,6 +761,7 @@ export function useWebSocket(
         type: 'error',
         timestamp: Date.now(),
         data: {
+          error: wsError.code,
           code: wsError.code,
           message: wsError.message,
           details: wsError.details
@@ -644,7 +790,7 @@ export function useWebSocket(
 
   /**
    * Cleanup on unmount - prevent reconnection attempts
-   * Fixed for React StrictMode compatibility
+   * Task 8: Enhanced with ping timer cleanup
    */
   useEffect(() => {
     return () => {
@@ -663,6 +809,13 @@ export function useWebSocket(
         clearTimeout(connectionStateRef.current.connectionTimer)
         connectionStateRef.current.connectionTimer = null
       }
+      // Task 8: Clear ping timer
+      if (connectionStateRef.current.pingTimer) {
+        clearInterval(connectionStateRef.current.pingTimer)
+        connectionStateRef.current.pingTimer = null
+      }
+      // Task 8: Clear request queue
+      connectionStateRef.current.requestQueue = []
       setConnectionStatus('disconnected')
     }
   }, [debugLog]) // Empty dependency array to prevent StrictMode issues
