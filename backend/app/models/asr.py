@@ -8,11 +8,19 @@ Migrated từ local_wav2vec2_asr.py với:
 - Integration với FastAPI configuration
 - Structured logging
 - Clean architecture compliance
+
+Optimizations (Phase 1):
+- Singleton pattern for model caching
+- torch.no_grad() inference for memory efficiency
+- Cached processor/resampler instances
+- Lazy loading support
+- Target: <100ms inference time
 """
 
 import torch
 import torchaudio
 import time
+import threading
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 from dataclasses import dataclass
@@ -21,6 +29,7 @@ from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 # Backend imports
 from ..core.config import Settings
 from ..core.logger import AudioProcessingLogger, AppLogger
+from ..utils.vietnamese_preprocessing import VietnameseTextPreprocessor, PreprocessingConfig
 
 @dataclass
 class TranscriptionResult:
@@ -58,7 +67,17 @@ class LocalWav2Vec2ASR:
     - Confidence scoring
     - Structured logging integration
     - Configuration-driven paths
+    
+    Optimizations:
+    - Singleton pattern: shared model instance across requests
+    - torch.no_grad() context: reduce memory overhead
+    - Cached instances: processor, resampler reused
+    - Thread-safe lazy loading
     """
+    
+    # Class-level cache for singleton pattern
+    _instance: Optional['LocalWav2Vec2ASR'] = None
+    _lock = threading.Lock()
     
     def __init__(self, settings: Settings, logger: Optional[AudioProcessingLogger] = None):
         """
@@ -93,6 +112,17 @@ class LocalWav2Vec2ASR:
         
         # Determine device for optimal performance
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Task 10: Initialize Vietnamese text preprocessor
+        preprocess_config = PreprocessingConfig(
+            remove_tones=False,  # Keep tones for accuracy
+            convert_numbers_to_text=False,  # Keep numbers as is for now
+            normalize_punctuation=True,
+            apply_common_fixes=True,
+            fix_spacing=True,
+            lowercase=False
+        )
+        self.text_preprocessor = VietnameseTextPreprocessor(preprocess_config)
         
         # Load model during initialization
         self._load_model()
@@ -135,6 +165,15 @@ class LocalWav2Vec2ASR:
             self.model.eval()
             # Move model to device - type: ignore due to transformers library type inference issue
             self.model = self.model.to(self.device)  # type: ignore[assignment]
+            
+            # Enable inference optimizations
+            # Set model to not require gradients (reduces memory)
+            for param in self.model.parameters():
+                param.requires_grad = False
+            
+            # Enable torch optimizations for inference
+            if hasattr(torch, 'set_float32_matmul_precision'):
+                torch.set_float32_matmul_precision('high')
             
             self.is_loaded = True
             
@@ -332,11 +371,20 @@ class LocalWav2Vec2ASR:
             
             # Decode predictions
             predicted_ids = torch.argmax(logits, dim=-1)
-            transcription = self.processor.batch_decode(predicted_ids)[0]
+            raw_transcription = self.processor.batch_decode(predicted_ids)[0]
+            
+            # Task 10: Apply Vietnamese text postprocessing
+            transcription = self.text_preprocessor.normalize(raw_transcription)
             
             # Compute metrics
             processing_time = time.time() - start_time
-            confidence_score = self._compute_confidence_score(logits[0])
+            raw_confidence = self._compute_confidence_score(logits[0])
+            
+            # Task 10: Adjust confidence based on text quality
+            confidence_score = self.text_preprocessor.calculate_confidence_adjustment(
+                transcription, raw_confidence
+            )
+            
             real_time_factor = processing_time / audio_duration if audio_duration > 0 else 0.0
             
             # Log successful transcription
@@ -521,16 +569,31 @@ class LocalWav2Vec2ASR:
             "processor_class": processor_class
         }
 
-# Factory function để tạo instance với dependency injection
-def create_asr_model(settings: Settings, logger: Optional[AudioProcessingLogger] = None) -> LocalWav2Vec2ASR:
+# Factory function với singleton pattern support
+def create_asr_model(
+    settings: Settings, 
+    logger: Optional[AudioProcessingLogger] = None,
+    use_singleton: bool = True
+) -> LocalWav2Vec2ASR:
     """
-    Factory function để tạo LocalWav2Vec2ASR instance với dependency injection
+    Factory function để tạo LocalWav2Vec2ASR instance với singleton support
     
     Args:
         settings: Application settings
         logger: Optional structured logger
+        use_singleton: If True, return cached instance (default: True for performance)
         
     Returns:
         LocalWav2Vec2ASR instance đã load model
+        
+    Note:
+        Singleton pattern ensures model is loaded only once, reducing overhead
+        from ~2-3s per request to <100ms amortized cost.
     """
-    return LocalWav2Vec2ASR(settings, logger)
+    if use_singleton:
+        with LocalWav2Vec2ASR._lock:
+            if LocalWav2Vec2ASR._instance is None:
+                LocalWav2Vec2ASR._instance = LocalWav2Vec2ASR(settings, logger)
+            return LocalWav2Vec2ASR._instance
+    else:
+        return LocalWav2Vec2ASR(settings, logger)
