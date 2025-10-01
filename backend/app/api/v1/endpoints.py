@@ -161,28 +161,6 @@ async def websocket_endpoint(
         await websocket.send_json({"status": "connected", "message": "WebSocket ready"})
         print("📤 Sent status message")
         
-        while True:
-            try:
-                # Receive any data
-                data = await websocket.receive_bytes()
-                print(f"📩 Received {len(data)} bytes")
-                
-                # Send back simple response (just echo info, no processing)
-                response = {
-                    "text": "Debug response - no processing",
-                    "bytes_received": len(data),
-                    "status": "debug_mode"
-                }
-                
-                await websocket.send_json(response)
-                print(f"📤 Sent response: {response}")
-                
-            except Exception as loop_error:
-                print(f"❌ WebSocket loop error: {loop_error}")
-                break
-        
-        # Debug mode - simple connection
-        
         # Main processing loop
         while True:
             try:
@@ -203,13 +181,21 @@ async def websocket_endpoint(
                     await connection_manager.send_error(websocket, error_response)
                     continue
                 
-                # Process audio chunk
+                # Process audio chunk (OPTIMIZED: Use async version)
                 processing_start = time.time()
                 
                 try:
                     print(f"🔄 Processing {len(audio_data)} bytes audio...")
-                    # Use safe processing wrapper
-                    result = audio_processor.process_audio_chunk_safe(audio_data)
+                    # Use ASYNC processing for better performance
+                    try:
+                        result = await audio_processor.process_audio_bytes_async(audio_data)
+                    except Exception as async_error:
+                        # Fallback to sync version if async fails
+                        websocket_logger.log_error(
+                            error=f"Async processing failed, using sync: {async_error}",
+                            error_type="async_fallback"
+                        )
+                        result = audio_processor.process_audio_chunk_safe(audio_data)
                     print(f"✅ Processing result: {type(result)}")
                 except Exception as process_error:
                     print(f"❌ Processing error: {process_error}")

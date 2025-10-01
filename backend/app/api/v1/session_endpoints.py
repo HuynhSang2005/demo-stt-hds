@@ -251,11 +251,18 @@ async def session_websocket_endpoint(
                 session_processor = await get_session_processor()
                 result = await session_processor.finalize_session(current_session)
                 if result:
+                    # DEBUG: Log confidence values before sending
+                    result_dict = result.dict()
+                    print(f"\n[DEBUG WS] Sending result to frontend:")
+                    print(f"  ASR confidence: {result_dict.get('asr_confidence')}")
+                    print(f"  Sentiment confidence: {result_dict.get('sentiment_confidence')}")
+                    print(f"  Sentiment label: {result_dict.get('sentiment_label')}")
+                    
                     # Try to send final result
                     try:
                         await websocket.send_json({
                             "type": "transcription_result",
-                            "result": result.dict()
+                            "result": result_dict
                         })
                     except:
                         pass  # Connection might be closed
