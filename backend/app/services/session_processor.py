@@ -241,7 +241,7 @@ class SessionAudioProcessor:
             # Classification: Analyze sentiment/toxicity
             classification_result = self.classifier.classify(text)
             label = classification_result.get('label', 'neutral')
-            confidence = classification_result.get('confidence', 0.0)
+            confidence = classification_result.get('confidence_score', 0.0)  # FIXED: correct key name
             
             # Determine warning status - either from classifier or bad words
             warning = label in ["toxic", "negative"] or len(bad_words) > 0
