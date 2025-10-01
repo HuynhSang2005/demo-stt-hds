@@ -3,14 +3,16 @@ import { TranscriptResultSchema } from './transcript.schema'
 
 /**
  * WebSocket message types for Vietnamese STT real-time communication
+ * ⚠️ UPDATED: Added 'transcription_result' for backend compatibility
  */
 export const WebSocketMessageTypeSchema = z.enum([
-  'audio_chunk',      // Client sending audio data
-  'transcript_result', // Server sending transcription result
-  'error',            // Error message
-  'connection_status', // Connection status update
-  'ping',             // Heartbeat ping
-  'pong'              // Heartbeat pong
+  'audio_chunk',           // Client sending audio data
+  'transcript_result',     // Server sending transcription result (preferred)
+  'transcription_result',  // Backend alias (for compatibility)
+  'error',                 // Error message
+  'connection_status',     // Connection status update
+  'ping',                  // Heartbeat ping
+  'pong'                   // Heartbeat pong
 ]).describe('WebSocket message types for real-time Vietnamese STT')
 
 /**
@@ -82,20 +84,29 @@ export const TranscriptResultMessageSchema = BaseWebSocketMessageSchema.extend({
 
 /**
  * Error message
+ * ⚠️ UPDATED: Uses 'error' field instead of 'code' for backend compatibility
  */
 export const ErrorMessageSchema = BaseWebSocketMessageSchema.extend({
   type: z.literal('error'),
   
   data: z.object({
+    error: z.string()
+      .describe('Error type identifier (backend uses this instead of code)'),
+    
     code: z.string()
-      .describe('Error code identifier'),
+      .optional()
+      .describe('Error code identifier (optional, for frontend compatibility)'),
     
     message: z.string()
       .describe('Human-readable error message'),
     
-    details: z.any()
+    details: z.record(z.string(), z.unknown())
       .optional()
-      .describe('Optional error details')
+      .describe('Optional error details'),
+    
+    timestamp: z.union([z.number(), z.string()])
+      .optional()
+      .describe('Error timestamp (backend may send datetime)')
   }).describe('Error information')
 }).describe('WebSocket error message')
 
