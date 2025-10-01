@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_CONNECTIONS: int = Field(default=100, description="Max concurrent WebSocket connections")
     REQUEST_TIMEOUT: float = Field(default=30.0, description="Request timeout in seconds")
     
+    # Batch Processing Settings (Phase 1 Optimization)
+    ENABLE_BATCH_PROCESSING: bool = Field(default=True, description="Enable micro-batching for better GPU utilization")
+    ASR_BATCH_SIZE: int = Field(default=5, description="Max batch size for ASR inference")
+    ASR_BATCH_TIMEOUT: float = Field(default=0.05, description="Max wait time for ASR batch in seconds")
+    CLASSIFIER_BATCH_SIZE: int = Field(default=8, description="Max batch size for text classification")
+    CLASSIFIER_BATCH_TIMEOUT: float = Field(default=0.03, description="Max wait time for classifier batch in seconds")
+    
     class Config:
         """Pydantic configuration"""
         case_sensitive = True

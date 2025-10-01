@@ -232,6 +232,10 @@ app.include_router(
 from .api.v1.rest_endpoints import router as rest_router
 app.include_router(rest_router)
 
+# Task 12: Include Metrics API router
+from .api.v1.metrics import router as metrics_router
+app.include_router(metrics_router, tags=["Performance Metrics"])
+
 # Root endpoint
 @app.get("/")
 async def root():
