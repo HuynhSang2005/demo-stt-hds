@@ -1,15 +1,23 @@
 @import "tailwindcss";
 
-@theme {
-  --color-transcript-neutral: hsl(210, 40%, 98%);
-  --color-transcript-positive: hsl(142, 76%, 96%);
-  --color-transcript-negative: hsl(25, 95%, 95%);
-  --color-transcript-toxic: hsl(0, 84%, 95%);
-  --color-warning: hsl(38, 92%, 50%);
-  --color-warning-background: hsl(48, 96%, 89%);
-
-  --animate-pulse-recording: pulse-recording 1s ease-in-out infinite;
-  --animate-waveform-pulse: waveform-pulse 0.8s ease-in-out infinite;
+/* Vietnamese STT App - Custom CSS Variables */
+:root {
+  /* Transcript sentiment colors */
+  --color-transcript-neutral: #f9fafb;
+  --color-transcript-positive: #f0fdf4;
+  --color-transcript-negative: #fef3c7;
+  --color-transcript-toxic: #fee2e2;
+  
+  /* Status colors */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  
+  /* UI colors */
+  --color-border: #e5e7eb;
+  --color-background: #ffffff;
+  --color-text: #111827;
 }
 
 /* Vietnamese STT App Custom Styles */

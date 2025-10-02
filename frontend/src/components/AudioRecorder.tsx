@@ -5,12 +5,15 @@ import { config } from '@/lib/config'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useSessionWebSocket } from '@/hooks/useSessionWebSocket'
+import { useRMSHistory } from '@/hooks/useRMSHistory'
 import { 
   useConnectionStatus,
   useCurrentSession, 
   useSessionActions,
   useTranscriptActions 
 } from '@/stores/vietnameseSTT.store'
+import { RecordingStatusIndicator } from './RecordingStatusIndicator'
+import { SimpleWaveform } from './SimpleWaveform'
 import type { TranscriptResult } from '@/types/transcript'
 
 /**
@@ -179,6 +182,14 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   
   // Calculate paused state
   const audioPaused = processingState === 'paused'
+  
+  // Track RMS history for waveform visualization (Phase 1 enhancement)
+  const { rmsHistory, isVoiceDetected } = useRMSHistory({
+    currentRMS: volume,
+    isRecording: audioRecording,
+    maxHistory: 20,
+    updateInterval: 100,
+  })
   
   // Stabilize websocketUrl to prevent useWebSocket re-creation
   const stableWebsocketUrl = useMemo(() => effectiveWebsocketUrl, [effectiveWebsocketUrl])
@@ -416,21 +427,36 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         )}
       </div>
       
-      {/* Recording controls */}
+      {/* Recording Status Indicator - Phase 1 Enhancement */}
+      <div className="mb-4">
+        <RecordingStatusIndicator
+          isRecording={audioRecording}
+          currentVolume={volume}
+          isVoiceDetected={isVoiceDetected}
+        />
+      </div>
+      
+      {/* Recording controls - Enhanced for Phase 1 */}
       <div className="flex items-center justify-center gap-4 mb-6">
         {!audioRecording ? (
-          // Start recording button
+          // Start recording button - Enhanced with gradient and larger size
           <button
             onClick={handleStartRecording}
             disabled={!isConnected || isStarting}
             className={cn(
-              "flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200",
+              "flex items-center justify-center rounded-full transition-all duration-300 relative group",
+              // Phase 1 Enhancement: Larger button (20x20 -> 80px x 80px)
+              "w-20 h-20",
               isConnected && !isStarting
-                ? "bg-red-500 hover:bg-red-600 text-white hover:scale-105 shadow-lg hover:shadow-xl"
+                ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white hover:scale-110 shadow-xl hover:shadow-2xl"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             )}
           >
-            <Mic className="w-8 h-8" />
+            {/* Pulse effect when ready */}
+            {isConnected && !isStarting && (
+              <div className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-20" />
+            )}
+            <Mic className="w-10 h-10 relative z-10" />
           </button>
         ) : (
           // Recording controls
@@ -438,17 +464,17 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             {/* Pause/Resume */}
             <button
               onClick={handlePauseResume}
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-500 hover:bg-yellow-600 text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center justify-center w-14 h-14 rounded-full bg-yellow-500 hover:bg-yellow-600 text-white transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              {audioPaused ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+              {audioPaused ? <Play className="w-7 h-7" /> : <Pause className="w-7 h-7" />}
             </button>
             
             {/* Stop */}
             <button
               onClick={handleStopRecording}
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center justify-center w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all duration-200 hover:scale-105 shadow-lg"
             >
-              <Square className="w-6 h-6 fill-current" />
+              <Square className="w-7 h-7 fill-current" />
             </button>
           </div>
         )}
@@ -468,6 +494,16 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           </div>
         </div>
       )}
+      
+      {/* Waveform Visualizer - Phase 1 Enhancement */}
+      <div className="mb-4">
+        <SimpleWaveform
+          rmsValues={rmsHistory}
+          isRecording={audioRecording}
+          isVoiceDetected={isVoiceDetected}
+          barCount={20}
+        />
+      </div>
       
       {/* Volume indicator */}
       {showVolumeIndicator && audioRecording && (
