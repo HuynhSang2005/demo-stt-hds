@@ -379,9 +379,14 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
    * Stop audio recording
    */
   const stopRecording = useCallback((): void => {
+    // BUG FIX (Bug 2): Explicitly stop and null MediaRecorder ref
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      console.log('[AudioRecorder] Stopping MediaRecorder with state:', mediaRecorderRef.current.state)
       mediaRecorderRef.current.stop()
     }
+    
+    // CRITICAL FIX: Null the ref to fully cleanup for next recording
+    mediaRecorderRef.current = null
 
     // Stop all tracks
     if (mediaStreamRef.current) {
@@ -451,6 +456,20 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
       // Setup audio context for volume detection
       setupAudioContext(stream)
+      
+      // BUG FIX (Bug 2): Cleanup old MediaRecorder before creating new one
+      // This prevents state conflicts when starting a new recording after stop
+      if (mediaRecorderRef.current) {
+        console.log('[AudioRecorder] Cleaning up previous MediaRecorder before creating new one')
+        try {
+          if (mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop()
+          }
+        } catch (e) {
+          console.warn('[AudioRecorder] Error stopping old MediaRecorder:', e)
+        }
+        mediaRecorderRef.current = null
+      }
 
       // Determine best supported audio format for Vietnamese STT
       // Task 7: Prioritize Opus codec for best compression/quality balance
