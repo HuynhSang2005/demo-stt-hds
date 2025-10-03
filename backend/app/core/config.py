@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     
     # Project metadata
     PROJECT_NAME: str = "Vietnamese Speech-to-Text + Toxic Detection API"
-    VERSION: str = "1.0.0"
-    DESCRIPTION: str = "Offline-first Vietnamese Speech Analysis with Wav2Vec2 ASR and PhoBERT Classification"
+    VERSION: str = "2.0.0"
+    DESCRIPTION: str = "Offline-first Vietnamese Speech Analysis with PhoWhisper ASR and PhoBERT Classification"
     
     # API Configuration
     API_V1_STR: str = "/v1"
@@ -32,12 +32,12 @@ class Settings(BaseSettings):
     
     # Model Paths - Offline Local Models
     ASR_MODEL_PATH: str = Field(
-        default="../wav2vec2-base-vietnamese-250h",
-        description="Path to local Wav2Vec2 Vietnamese ASR model"
+        default="PhoWhisper-base",
+        description="Path to local PhoWhisper Vietnamese ASR model (relative to project root)"
     )
     CLASSIFIER_MODEL_PATH: str = Field(
-        default="../phobert-vi-comment-4class", 
-        description="Path to local PhoBERT Vietnamese classifier model"
+        default="phobert-vi-comment-4class", 
+        description="Path to local PhoBERT Vietnamese classifier model (relative to project root)"
     )
     
     # CORS Settings
@@ -94,11 +94,12 @@ class Settings(BaseSettings):
         Returns:
             Dictionary với resolved paths cho ASR và Classifier models
         """
-        # Resolve model paths relative to the backend package directory (two parents up)
-        # Defaults like '../wav2vec2-base-vietnamese-250h' are written relative to backend/
-        backend_dir = Path(__file__).resolve().parents[2]
-        asr_path = (backend_dir / Path(self.ASR_MODEL_PATH)).resolve()
-        classifier_path = (backend_dir / Path(self.CLASSIFIER_MODEL_PATH)).resolve()
+        # Resolve model paths relative to the project root (three parents up from config.py)
+        # config.py location: backend/app/core/config.py
+        # parents[3]: project root (test-stt-hds/)
+        project_root = Path(__file__).resolve().parents[3]
+        asr_path = (project_root / Path(self.ASR_MODEL_PATH)).resolve()
+        classifier_path = (project_root / Path(self.CLASSIFIER_MODEL_PATH)).resolve()
 
         return {
             "asr": asr_path,
