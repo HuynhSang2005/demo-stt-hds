@@ -168,17 +168,18 @@ export function vietnameseSttClient(config: VietnameseSTTClientConfig = {}): Vie
       
       // Mock implementation for development
       return Promise.resolve({
-        id: `mock-${Date.now()}`,
         text: 'Mock transcript result',
-        label: 'neutral' as VietnameseSentiment,
-        confidence: 0.95,
-        timestamp: Date.now(),
+        sentiment_label: 'neutral' as VietnameseSentiment,
+        sentiment_confidence: 0.95,
+        asr_confidence: 0.95,
         warning: false,
-        duration: 3000,
-        metadata: {
-          processingTime: 1500,
-          modelVersion: 'mock-v1.0'
-        }
+        processing_time: 1.5,
+        real_time_factor: 0.5,
+        audio_duration: 3.0,
+        sample_rate: 16000,
+        timestamp: Date.now(),
+        bad_keywords: [],
+        session_id: 'mock-session'
       } satisfies TranscriptResult)
     },
 

@@ -24,7 +24,7 @@ interface AudioRecorderProps {
   websocketUrl?: string
   showSettings?: boolean
   showVolumeIndicator?: boolean
-  autoConnect?: boolean
+  autoConnect?: boolean  // Currently unused but kept for future use
   onError?: (error: Error) => void
 }
 
@@ -90,7 +90,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   websocketUrl = config.backend.wsUrl,
   showSettings = true,
   showVolumeIndicator = true,
-  autoConnect = true,
+  autoConnect: _autoConnect = true,
   onError,
 }) => {
   const [duration, setDuration] = useState(0)

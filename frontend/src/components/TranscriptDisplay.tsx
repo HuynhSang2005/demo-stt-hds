@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import { 
   VIETNAMESE_UI_TEXT, 
   formatVietnameseDateTime, 
-  formatVietnameseNumbers,
   vietnameseUI 
 } from '@/utils/vietnamese'
 import { 
@@ -13,25 +12,12 @@ import {
   useWarnings,
   useCurrentTranscript 
 } from '@/stores/vietnameseSTT.store'
-import type { VietnameseSentiment, TranscriptResult } from '@/types/transcript'
-
-// Import TranscriptEntry type from store where it's defined  
-type TranscriptEntry = TranscriptResult & {
-  id: string
-  sessionId: string
-  timestamp: number
-  text: string
-  label: VietnameseSentiment
-  confidence: number
-  warning: boolean
-  bad_keywords?: string[]
-  isProcessing: boolean
-  metadata?: { 
-    audioChunkSize?: number
-    processingTime?: number
-    modelVersion?: string
-  }
-}
+import type { TranscriptEntry } from '@/stores/vietnameseSTT.store'
+import { ConfidenceProgressBar } from './ConfidenceProgressBar'
+import { SentimentBadge } from './SentimentBadge'
+import { ConfidenceBreakdown } from './ConfidenceBreakdown'
+import { ToxicWarningAlert } from './ToxicWarningAlert'
+import { BadKeywordsList } from './BadKeywordsList'
 
 /**
  * Props for TranscriptDisplay component
@@ -46,25 +32,6 @@ interface TranscriptDisplayProps {
 }
 
 /**
- * Get appropriate CSS classes for sentiment labels
- */
-const getSentimentStyles = (label: VietnameseSentiment, isWarning: boolean) => {
-  const baseStyles = "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-  
-  if (isWarning) {
-    return cn(baseStyles, {
-      'bg-red-100 text-red-800 border border-red-200': label === 'toxic',
-      'bg-orange-100 text-orange-800 border border-orange-200': label === 'negative',
-    })
-  }
-  
-  return cn(baseStyles, {
-    'bg-green-100 text-green-800 border border-green-200': label === 'positive',
-    'bg-gray-100 text-gray-800 border border-gray-200': label === 'neutral',
-  })
-}
-
-/**
  * Use Vietnamese formatting utilities
  */
 
@@ -73,7 +40,7 @@ const getSentimentStyles = (label: VietnameseSentiment, isWarning: boolean) => {
  * Task 9: Memoized to prevent unnecessary re-renders
  */
 const TranscriptEntryComponent = React.memo<{
-  transcript: TranscriptEntry
+  transcript: import('@/stores/vietnameseSTT.store').TranscriptEntry
   isSelected: boolean
   onSelect: () => void
 }>(({ transcript, isSelected, onSelect }) => {
@@ -81,71 +48,92 @@ const TranscriptEntryComponent = React.memo<{
     <div
       onClick={onSelect}
       className={cn(
-        "p-4 rounded-lg border transition-all duration-200 cursor-pointer hover:shadow-md",
+        // Phase 4: Enhanced card styling
+        "p-5 rounded-xl border-2 transition-all duration-300 cursor-pointer",
+        "hover:shadow-xl hover:-translate-y-1",
+        // Selected state
         isSelected 
-          ? "border-blue-500 bg-blue-50 shadow-sm" 
-          : "border-gray-200 hover:border-gray-300 bg-white",
-        transcript.warning && "ring-2 ring-red-200 ring-opacity-50"
+          ? "border-blue-500 bg-blue-50 shadow-lg scale-[1.02]" 
+          : "border-gray-200 hover:border-blue-300 bg-white",
+        // Warning ring
+        transcript.warning && "ring-2 ring-red-300 ring-opacity-60 shadow-red-100"
       )}
     >
-      {/* Header with timestamp and warning indicator */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Clock className="w-4 h-4" />
-          <span className="font-mono">
+      {/* Phase 4: Enhanced Header - Card header section */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+        <div className="flex items-center gap-2.5">
+          <Clock className="w-4 h-4 text-gray-500" />
+          <span className="font-mono text-sm font-semibold text-gray-700">
             {formatVietnameseDateTime.time(transcript.timestamp)}
           </span>
           {transcript.warning && (
-            <AlertTriangle className="w-4 h-4 text-red-500" />
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+              <span className="text-xs font-bold text-red-700">Cảnh báo</span>
+            </div>
           )}
         </div>
         
-        <div className="flex items-center gap-2">
-          {/* Confidence indicator */}
-          <span className="text-xs text-gray-500">
-            {formatVietnameseNumbers.percentage(transcript.confidence)}
-          </span>
-          
-          {/* Sentiment label */}
-          <span className={getSentimentStyles(transcript.label, transcript.warning)}>
-            {transcript.label}
-          </span>
-        </div>
+        {/* Phase 2: New SentimentBadge component */}
+        <SentimentBadge 
+          sentiment={transcript.label}
+          confidence={transcript.metadata?.sentimentConfidence}
+          showEmoji
+          showConfidence={!!transcript.metadata?.sentimentConfidence}
+          size="md"
+        />
       </div>
       
-      {/* Vietnamese text content */}
-      <div className="mb-2">
+      {/* Phase 2: Confidence Progress Bar */}
+      {transcript.confidence > 0 && (
+        <div className="mb-3">
+          <ConfidenceProgressBar 
+            confidence={transcript.confidence}
+            showLabel
+            showPercentage
+            size="md"
+            animated
+          />
+        </div>
+      )}
+      
+      {/* Phase 3: Toxic Warning Alert - Prominent banner for toxic/negative content */}
+      {transcript.warning && (transcript.label === 'toxic' || transcript.label === 'negative') && (
+        <div className="mb-3">
+          <ToxicWarningAlert 
+            sentiment={transcript.label}
+            badKeywordsCount={transcript.bad_keywords?.length}
+            variant="banner"
+          />
+        </div>
+      )}
+      
+      {/* Phase 4: Enhanced Vietnamese text content - Body section */}
+      <div className="mb-4">
         <p className={cn(
           vietnameseUI.getTextClasses('transcript'),
-          "text-gray-900 leading-relaxed font-medium text-base",
+          // Phase 4: Larger text for better readability
+          "text-gray-900 leading-relaxed font-medium text-lg",
           // Highlight warnings with subtle background
-          transcript.warning && "bg-red-50 px-2 py-1 rounded"
+          transcript.warning && "bg-red-50 px-3 py-2 rounded-lg border-l-4 border-red-400"
         )}>
           {transcript.text || (
-            <span className="italic text-gray-400">
+            <span className="italic text-gray-400 text-base">
               {VIETNAMESE_UI_TEXT.transcripts.processing}
             </span>
           )}
         </p>
       </div>
       
-      {/* Bad keywords warning */}
+      {/* Phase 3: Bad Keywords List - Detailed keyword display */}
       {transcript.bad_keywords && transcript.bad_keywords.length > 0 && (
-        <div className="mb-2">
-          <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-medium text-red-700">Từ khóa không phù hợp:</span>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {transcript.bad_keywords.map((keyword: string, index: number) => (
-              <span 
-                key={index}
-                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200"
-              >
-                {keyword}
-              </span>
-            ))}
-          </div>
+        <div className="mb-3">
+          <BadKeywordsList 
+            keywords={transcript.bad_keywords}
+            severity={transcript.label === 'toxic' ? 'high' : 'medium'}
+            variant="default"
+            maxDisplay={5}
+          />
         </div>
       )}
       
@@ -157,29 +145,46 @@ const TranscriptEntryComponent = React.memo<{
         </div>
       )}
       
-      {/* Metadata info */}
-      {transcript.metadata && (
-        <div className="mt-2 pt-2 border-t border-gray-100">
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            {transcript.metadata.audioChunkSize && (
-              <span>
-                <Volume2 className="w-3 h-3 inline mr-1" />
-                {Math.round(transcript.metadata.audioChunkSize / 1024)}KB
-              </span>
-            )}
-            {transcript.metadata.processingTime && (
-              <span>
-                Xử lý: {transcript.metadata.processingTime}ms
-              </span>
-            )}
+      {/* Phase 4: Footer section - Metadata and confidence breakdown */}
+      <div className="mt-4 pt-4 border-t-2 border-gray-100 space-y-3">
+        {/* Phase 2: Confidence Breakdown - Detailed ASR vs Sentiment analysis */}
+        {transcript.metadata?.asrConfidence && transcript.metadata?.sentimentConfidence && (
+          <div className="bg-gray-50 rounded-lg p-3">
+            <ConfidenceBreakdown 
+              asrConfidence={transcript.metadata.asrConfidence}
+              sentimentConfidence={transcript.metadata.sentimentConfidence}
+              overallConfidence={transcript.confidence}
+              showFormula={false}
+              showWeights
+              layout="vertical"
+            />
+          </div>
+        )}
+        
+        {/* Phase 4: Enhanced Metadata info */}
+        {transcript.metadata && (
+          <div className="flex items-center justify-between flex-wrap gap-3 text-xs">
+            <div className="flex items-center gap-4 text-gray-600">
+              {transcript.metadata.audioChunkSize && (
+                <span className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-full">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span className="font-medium">{Math.round(transcript.metadata.audioChunkSize / 1024)}KB</span>
+                </span>
+              )}
+              {transcript.metadata.processingTime && (
+                <span className="flex items-center gap-1 font-medium">
+                  ⚡ Xử lý: {transcript.metadata.processingTime}ms
+                </span>
+              )}
+            </div>
             {transcript.metadata.modelVersion && (
-              <span>
-                Model: {transcript.metadata.modelVersion}
+              <span className="text-gray-500 font-mono text-xs">
+                {transcript.metadata.modelVersion}
               </span>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }, (prevProps, nextProps) => {
