@@ -299,9 +299,19 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             sessionWebSocket.sendAudioChunk(chunk, 0)
           }
           
-          // End backend session - transcript result will be received via WebSocket
-          await sessionWebSocket.endSession()
-          console.log('[AudioRecorder] Backend session ended')
+          // CRITICAL FIX (Bug 1): endSession() RETURNS transcript via Promise
+          // Must explicitly handle the result to display transcript in UI
+          const transcriptResult = await sessionWebSocket.endSession()
+          console.log('[AudioRecorder] Backend session ended, transcript:', transcriptResult)
+          
+          // BUG FIX: Call handleTranscriptResult with the returned transcript
+          // This ensures transcript is added to store even if WebSocket message is missed
+          if (transcriptResult) {
+            console.log('[AudioRecorder] Adding transcript from Promise return value')
+            handleTranscriptResult(transcriptResult)
+          } else {
+            console.warn('[AudioRecorder] No transcript returned from endSession()')
+          }
         } catch (error) {
           console.error('[AudioRecorder] Failed to process session:', error)
         }
