@@ -36,7 +36,7 @@ from ..core.error_handling import (
     TimeoutError as AppTimeoutError, CircuitBreaker,
     retry_with_backoff, ErrorSeverity, ErrorCategory
 )
-from ..models.asr import LocalWav2Vec2ASR, create_asr_model, TranscriptionResult
+from ..models.phowhisper_asr import PhoWhisperASR, create_asr_model, TranscriptionResult
 from ..models.classifier import LocalPhoBERTClassifier, create_classifier_model, ClassificationResult
 from ..schemas.audio import TranscriptResult, ErrorResponse, create_transcript_result, create_error_response
 
@@ -97,7 +97,7 @@ class AudioProcessor:
         self.app_logger = AppLogger("audio_processor_app")
         
         # Initialize models
-        self.asr_model: Optional[LocalWav2Vec2ASR] = None
+        self.asr_model: Optional[PhoWhisperASR] = None
         self.classifier_model: Optional[LocalPhoBERTClassifier] = None
         
         # Performance tracking
@@ -271,7 +271,7 @@ class AudioProcessor:
             # Convert to user-friendly error
             raise ModelInferenceError(
                 f"Speech recognition failed: {str(e)}",
-                model_name="Wav2Vec2 ASR"
+                model_name="PhoWhisper ASR"
             ) from e
     
     async def _run_classifier_with_protection(self, text: str) -> dict:
@@ -473,7 +473,7 @@ class AudioProcessor:
             except Exception as e:
                 raise ModelInferenceError(
                     f"Speech recognition failed: {str(e)}",
-                    model_name="Wav2Vec2 ASR"
+                    model_name="PhoWhisper ASR"
                 ) from e
             asr_processing_time = time.time() - asr_start_time
             
