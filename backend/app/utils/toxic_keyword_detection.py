@@ -44,7 +44,7 @@ class VietnameseToxicKeywordDetector:
         # Offensive but less explicit
         'ngứa', 'rẻ rách', 'thấp hèn', 'đê tiện',
         'khốn nạn', 'đồ khốn', 'đồ bẩn', 'đồ rác',
-        'khốn', 'thằng khốn', 'con khốn',
+        'thằng khốn', 'con khốn',  # Removed standalone "khốn" to avoid false positives with "khôn" (smart)
         'kém cỏi', 'vô dụng', 'vô giátrị', 'bất tài',
         'xấu xa', 'độc ác', 'ác độc', 'tệ hại',
     }
@@ -112,15 +112,16 @@ class VietnameseToxicKeywordDetector:
     def normalize_text(self, text: str) -> str:
         """
         Normalize text for better keyword matching
+        IMPORTANT: Preserves Vietnamese tone marks for accurate matching
         
         Args:
             text: Input text
             
         Returns:
-            Normalized text
+            Normalized text with preserved tones
         """
-        # Lowercase
-        text = text.lower()
+        # DO NOT lowercase - preserve Vietnamese tones (khôn ≠ khốn, thằng ≠ thẳng)
+        # Instead, use case-insensitive matching in detect_keywords()
         
         # Remove excessive punctuation
         text = re.sub(r'[.,!?]{2,}', ' ', text)
@@ -128,16 +129,17 @@ class VietnameseToxicKeywordDetector:
         # Normalize spaces
         text = re.sub(r'\s+', ' ', text)
         
-        # Apply misspelling corrections if enabled
+        # Apply misspelling corrections if enabled (use case-insensitive)
         if self.enable_fuzzy_matching:
             for misspell, correct in self.MISSPELLING_MAP.items():
-                text = re.sub(r'\b' + re.escape(misspell) + r'\b', correct, text)
+                # Case-insensitive replacement while preserving correct tones
+                text = re.sub(r'\b' + re.escape(misspell) + r'\b', correct, text, flags=re.IGNORECASE)
         
         return text.strip()
     
     def detect_keywords(self, text: str) -> List[KeywordMatch]:
         """
-        Detect toxic keywords in text
+        Detect toxic keywords in text with tone-aware matching
         
         Args:
             text: Input text to analyze
@@ -149,12 +151,23 @@ class VietnameseToxicKeywordDetector:
             return []
         
         matches = []
+        # Use original text preserving Vietnamese tones for accurate matching
         normalized_text = self.normalize_text(text)
         
-        # Check high severity keywords
+        # Helper function for tone-aware word boundary matching
+        def find_keyword_with_boundary(keyword: str, text: str) -> List[int]:
+            """Find keyword positions respecting word boundaries and Vietnamese tones"""
+            positions = []
+            # Use regex with word boundaries for Vietnamese
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                positions.append(match.start())
+            return positions
+        
+        # Check high severity keywords with tone-aware matching
         for keyword in self.TOXIC_KEYWORDS_HIGH:
-            if keyword in normalized_text:
-                position = normalized_text.find(keyword)
+            positions = find_keyword_with_boundary(keyword, normalized_text)
+            for position in positions:
                 context = self._extract_context(text, position, keyword)
                 matches.append(KeywordMatch(
                     keyword=keyword,
@@ -164,10 +177,10 @@ class VietnameseToxicKeywordDetector:
                     confidence=0.95
                 ))
         
-        # Check medium severity keywords
+        # Check medium severity keywords with tone-aware matching
         for keyword in self.TOXIC_KEYWORDS_MEDIUM:
-            if keyword in normalized_text:
-                position = normalized_text.find(keyword)
+            positions = find_keyword_with_boundary(keyword, normalized_text)
+            for position in positions:
                 context = self._extract_context(text, position, keyword)
                 matches.append(KeywordMatch(
                     keyword=keyword,
@@ -177,10 +190,10 @@ class VietnameseToxicKeywordDetector:
                     confidence=0.85
                 ))
         
-        # Check low severity keywords
+        # Check low severity keywords with tone-aware matching
         for keyword in self.TOXIC_KEYWORDS_LOW:
-            if keyword in normalized_text:
-                position = normalized_text.find(keyword)
+            positions = find_keyword_with_boundary(keyword, normalized_text)
+            for position in positions:
                 context = self._extract_context(text, position, keyword)
                 matches.append(KeywordMatch(
                     keyword=keyword,

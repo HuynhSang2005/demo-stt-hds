@@ -7,14 +7,17 @@ import re
 from typing import List, Set
 
 # Vietnamese bad words list (sample - add more as needed)
+# IMPORTANT: Removed standalone neutral words to avoid false positives
+# - "thằng" alone is neutral (like "he/that guy"), only toxic when combined (e.g., "thằng ngu")
+# - "khốn" removed due to tone confusion with "khôn" (smart)
 VIETNAMESE_BAD_WORDS = {
     # Common toxic words
-    "đồ chó", "con chó", "súc vật", "thằng", "con điên", "khùng", 
+    "đồ chó", "con chó", "súc vật", "con điên", "khùng", 
     "đần", "ngu", "đâm", "giết", "chết", "tử", "địt", "đụ", 
     "cặc", "lồn", "buồi", "đĩ", "cave", "gái điếm", "con đĩ",
     "óc chó", "não chó", "đầu óc", "não cá vàng", "đầu tôm",
     "chửi", "bậy", "tệ", "dở", "dớ", "xấu xa", "đáng ghét",
-    "khốn", "khốn nạn", "đồ khốn", "con khốn", "tồi tệ",
+    "khốn nạn", "đồ khốn", "con khốn", "tồi tệ",  # Removed standalone "khốn" 
     "độc ác", "xấu tính", "ác độc", "đê tiện", "hèn hạ",
     "phản bội", "lừa dối", "gian lận", "lúc lưỡi", "xảo quyệt",
     
@@ -37,12 +40,13 @@ VIETNAMESE_BAD_WORDS = {
 def preprocess_text_for_detection(text: str) -> str:
     """
     Preprocess text for bad word detection
-    - Convert to lowercase
+    IMPORTANT: Preserves Vietnamese tones for accurate matching
     - Remove extra spaces
     - Remove special characters that might hide bad words
+    - NO lowercase to preserve tone marks (khôn ≠ khốn)
     """
-    # Convert to lowercase
-    text = text.lower()
+    # DO NOT lowercase - preserves Vietnamese tone distinctions
+    # (khôn = smart, khốn = bad; thẳng = straight, thằng = guy)
     
     # Remove common obfuscation characters
     text = text.replace("*", "").replace("-", "").replace("_", "")
@@ -56,7 +60,7 @@ def preprocess_text_for_detection(text: str) -> str:
 
 def detect_bad_words(text: str) -> List[str]:
     """
-    Detect bad words in Vietnamese text
+    Detect bad words in Vietnamese text with tone-aware matching
     
     Args:
         text: Input Vietnamese text
@@ -67,27 +71,20 @@ def detect_bad_words(text: str) -> List[str]:
     if not text or len(text.strip()) == 0:
         return []
     
-    # Preprocess text
+    # Preprocess text (preserves tones)
     processed_text = preprocess_text_for_detection(text)
     print(f"[Bad Words] Processing text: '{text}' -> '{processed_text}'")
     
     detected_words = []
     
-    # Check each bad word
+    # Check each bad word with case-insensitive + word boundary matching
     for bad_word in VIETNAMESE_BAD_WORDS:
-        # Direct substring match (more lenient)
-        if bad_word in processed_text:
+        # Use regex with word boundaries for accurate matching
+        # Case-insensitive but tone-sensitive (preserves Vietnamese diacritics)
+        pattern = r'\b' + re.escape(bad_word) + r'\b'
+        if re.search(pattern, processed_text, re.IGNORECASE):
             detected_words.append(bad_word)
             print(f"[Bad Words] Detected: '{bad_word}' in '{processed_text}'")
-            continue
-        
-        # Also check individual words for single-word bad words
-        words = processed_text.split()
-        for word in words:
-            if word == bad_word:
-                detected_words.append(bad_word)
-                print(f"[Bad Words] Detected word: '{bad_word}'")
-                break
     
     # Remove duplicates and return
     result = list(set(detected_words))
