@@ -1,6 +1,12 @@
 """
 Vietnamese bad words detection utilities
 Detects toxic/inappropriate words in Vietnamese text
+
+⚠️ DEPRECATED: This module is kept for backward compatibility only.
+   For production use, please use VietnameseToxicKeywordDetector in toxic_keyword_detection.py
+   
+   Session processor now uses classifier.classify_ensemble() which includes
+   VietnameseToxicKeywordDetector internally with better accuracy.
 """
 
 import re

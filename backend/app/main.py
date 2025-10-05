@@ -14,6 +14,7 @@ Features:
 
 import asyncio
 import time
+import subprocess
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, Request, HTTPException, status
@@ -22,6 +23,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 import uvicorn
+import torchaudio
 
 # Backend imports
 from .core.config import Settings, get_settings, print_model_status
@@ -61,6 +63,49 @@ async def lifespan(app: FastAPI):
         "asr_model_path": settings.ASR_MODEL_PATH,
         "classifier_model_path": settings.CLASSIFIER_MODEL_PATH,
     })
+
+    # Check ffmpeg availability (required for WebM/Opus support)
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-version'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            raise RuntimeError("FFmpeg command failed")
+        
+        app_logger.logger.info(
+            "ffmpeg_check_passed",
+            ffmpeg_version=result.stdout.split('\n')[0],
+            event_type="startup_check"
+        )
+        print("[STARTUP] FFmpeg found and working")
+        
+    except (FileNotFoundError, subprocess.TimeoutExpired, RuntimeError) as e:
+        error_msg = (
+            "FFmpeg not found or not working! This is required for WebM/Opus audio decoding.\n"
+            "Install with:\n"
+            "  - Windows: Download from https://ffmpeg.org/download.html\n"
+            "  - Linux: apt-get install ffmpeg\n"
+            "  - Mac: brew install ffmpeg"
+        )
+        app_logger.logger.error("ffmpeg_check_failed", error=str(e))
+        print(f"[ERROR] {error_msg}")
+        raise RuntimeError(error_msg) from e
+
+    # Set torchaudio backend to ffmpeg for WebM/Opus support
+    try:
+        torchaudio.set_audio_backend('ffmpeg')
+        app_logger.logger.info(
+            "torchaudio_backend_set",
+            backend="ffmpeg",
+            event_type="audio_config"
+        )
+        print("[STARTUP] Torchaudio backend set to ffmpeg (WebM/Opus support enabled)")
+    except Exception as e:
+        app_logger.logger.error("torchaudio_backend_failed", error=str(e))
+        raise RuntimeError(f"Failed to set torchaudio backend: {e}") from e
 
     # Validate model paths before loading
     validation = settings.validate_model_paths()

@@ -54,12 +54,13 @@ class AudioProcessorError(BaseAppError):
 class AudioDecodingError(AudioInputError):
     """Lỗi khi decode audio data with user-friendly messages"""
     def __init__(self, message: str, **kwargs):
-        super().__init__(
-            message,
-            user_message="Unable to process audio file. Please check the format and try again.",
-            suggested_action="Ensure audio is in WAV, WebM, or MP3 format",
-            **kwargs
-        )
+        # AudioInputError already has user_message, only override if needed
+        if 'user_message' not in kwargs:
+            kwargs['user_message'] = "Unable to process audio file. Please check the format and try again."
+        if 'suggested_action' not in kwargs:
+            kwargs['suggested_action'] = "Ensure audio is in WAV, WebM, or MP3 format"
+        # Call BaseAppError directly to avoid AudioInputError's duplicate user_message
+        BaseAppError.__init__(self, message, **kwargs)
 
 class PipelineError(BaseAppError):
     """Lỗi trong quá trình xử lý pipeline"""
@@ -170,6 +171,7 @@ class AudioProcessor:
     def _decode_audio_bytes(self, audio_data: bytes) -> Tuple[torch.Tensor, int]:
         """
         Decode binary audio data thành waveform tensor
+        Supports WebM/Opus, WAV, MP3, etc. via torchaudio+ffmpeg backend
         
         Args:
             audio_data: Binary audio data (WebM, WAV, MP3, etc.)
@@ -181,10 +183,9 @@ class AudioProcessor:
             AudioDecodingError: Nếu không thể decode audio
         """
         try:
-            # Create BytesIO object từ binary data
+            # Single-step decode with torchaudio+ffmpeg backend
+            # Handles WebM/Opus, WAV, MP3, FLAC, etc. in one call
             audio_buffer = io.BytesIO(audio_data)
-            
-            # Decode using torchaudio
             waveform, sample_rate = torchaudio.load(audio_buffer)
             
             # Validate decoded audio
@@ -385,6 +386,9 @@ class AudioProcessor:
             # 5. Create final result
             total_processing_time = time.time() - pipeline_start_time
             
+            # Extract bad_keywords from classifier result
+            bad_keywords = classifier_dict.get('bad_keywords', [])
+            
             transcript_result = create_transcript_result(
                 text=asr_result.text,
                 asr_confidence=asr_result.confidence_score,
@@ -394,8 +398,27 @@ class AudioProcessor:
                 processing_time=total_processing_time,
                 audio_duration=audio_duration,
                 sample_rate=asr_result.sample_rate,
-                all_scores=classifier_result.all_scores
+                all_scores=classifier_result.all_scores,
+                bad_keywords=bad_keywords if bad_keywords else None
             )
+            
+            # Enhanced terminal logging for debugging
+            print(f"\n{'='*80}")
+            print(f"📊 PROCESSING RESULT (ASYNC)")
+            print(f"{'='*80}")
+            print(f"📝 Transcript: '{transcript_result.text}'")
+            print(f"🏷️  Label: {transcript_result.sentiment_label} (confidence: {transcript_result.sentiment_confidence:.2%})")
+            print(f"⚠️  Warning: {transcript_result.warning}")
+            if bad_keywords:
+                print(f"🚫 Bad Keywords Detected: {bad_keywords}")
+                print(f"   ↳ Count: {len(bad_keywords)}")
+                toxicity_score = classifier_dict.get('keyword_toxicity_score', 0.0)
+                print(f"   ↳ Toxicity Score: {toxicity_score:.2%}")
+            else:
+                print(f"✅ No bad keywords detected")
+            print(f"⏱️  Processing Time: {total_processing_time:.2f}s (RTF: {transcript_result.real_time_factor:.2f}x)")
+            print(f"🎵 Audio Duration: {audio_duration:.2f}s @ {transcript_result.sample_rate}Hz")
+            print(f"{'='*80}\n")
             
             # 6. Log successful pipeline completion
             self.audio_logger.log_pipeline_success(

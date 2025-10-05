@@ -31,13 +31,14 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=True, description="Debug mode")
     
     # Model Paths - Offline Local Models
+    # UPDATED: PhoWhisper-small (Balanced speed and accuracy)
     ASR_MODEL_PATH: str = Field(
-        default="PhoWhisper-base",
-        description="Path to local PhoWhisper Vietnamese ASR model (relative to project root)"
+        default="../PhoWhisper-small",
+        description="Path to local PhoWhisper Vietnamese ASR model (relative to backend/ dir)"
     )
     CLASSIFIER_MODEL_PATH: str = Field(
-        default="phobert-vi-comment-4class", 
-        description="Path to local PhoBERT Vietnamese classifier model (relative to project root)"
+        default="../phobert-vi-comment-4class", 
+        description="Path to local PhoBERT Vietnamese classifier model (relative to backend/ dir)"
     )
     
     # CORS Settings
@@ -94,12 +95,15 @@ class Settings(BaseSettings):
         Returns:
             Dictionary với resolved paths cho ASR và Classifier models
         """
-        # Resolve model paths relative to the project root (three parents up from config.py)
+        # Resolve model paths relative to backend directory (two parents up from config.py)
         # config.py location: backend/app/core/config.py
-        # parents[3]: project root (test-stt-hds/)
-        project_root = Path(__file__).resolve().parents[3]
-        asr_path = (project_root / Path(self.ASR_MODEL_PATH)).resolve()
-        classifier_path = (project_root / Path(self.CLASSIFIER_MODEL_PATH)).resolve()
+        # parents[2]: backend/ directory
+        # Model paths are relative to backend/ (e.g., "../PhoWhisper-small")
+        backend_dir = Path(__file__).resolve().parents[2]
+        
+        # Resolve paths (handles both absolute and relative paths)
+        asr_path = (backend_dir / self.ASR_MODEL_PATH).resolve()
+        classifier_path = (backend_dir / self.CLASSIFIER_MODEL_PATH).resolve()
 
         return {
             "asr": asr_path,

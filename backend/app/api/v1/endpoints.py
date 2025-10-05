@@ -16,6 +16,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPExce
 from fastapi.responses import JSONResponse
 import json
 import time
+import uuid
 from typing import Dict, Any, Optional, List
 import asyncio
 
@@ -47,10 +48,13 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.connection_info: Dict[str, Dict[str, Any]] = {}
+        # Session buffer: session_id -> List[audio_bytes]
+        self.session_buffers: Dict[str, List[bytes]] = {}
     
     async def connect(self, websocket: WebSocket, client_id: Optional[str] = None) -> str:
-        """Accept WebSocket connection"""
-        await websocket.accept()
+        """Register WebSocket connection (already accepted by endpoint)"""
+        # NOTE: websocket.accept() is called by the endpoint BEFORE this method
+        # Do NOT accept here to avoid ASGI protocol violation (double accept)
         self.active_connections.append(websocket)
         
         # Generate client ID if not provided
@@ -62,7 +66,8 @@ class ConnectionManager:
             "websocket": websocket,
             "connected_at": time.time(),
             "processed_chunks": 0,
-            "total_processing_time": 0.0
+            "total_processing_time": 0.0,
+            "current_session_id": None  # Track active session for this connection
         }
         
         websocket_logger.log_connection_accepted(
@@ -99,25 +104,25 @@ class ConnectionManager:
         """Send error response to WebSocket"""
         error_message = create_websocket_message(
             msg_type="error",
-            data=error.dict()
+            data=error.model_dump(mode='json')
         )
-        await self.send_message(websocket, error_message.dict())
+        await self.send_message(websocket, error_message.model_dump(mode='json'))
     
     async def send_transcript_result(self, websocket: WebSocket, result: TranscriptResult) -> None:
         """Send transcript result to WebSocket"""
         result_message = create_websocket_message(
             msg_type="transcription_result",
-            data=result.dict()
+            data=result.model_dump(mode='json')
         )
-        await self.send_message(websocket, result_message.dict())
+        await self.send_message(websocket, result_message.model_dump(mode='json'))
     
     async def send_status(self, websocket: WebSocket, status: ConnectionStatus) -> None:
         """Send connection status to WebSocket"""
         status_message = create_websocket_message(
             msg_type="connection_status",
-            data=status.dict()
+            data=status.model_dump(mode='json')
         )
-        await self.send_message(websocket, status_message.dict())
+        await self.send_message(websocket, status_message.model_dump(mode='json'))
     
     def get_connection_stats(self) -> Dict[str, Any]:
         """Get connection statistics"""
@@ -146,7 +151,6 @@ async def websocket_endpoint(
     Real-time WebSocket endpoint for audio processing
     """
     # Generate unique client ID for this connection
-    import uuid
     client_id = str(uuid.uuid4())
     
     try:
@@ -157,15 +161,140 @@ async def websocket_endpoint(
         # Register connection with manager
         client_id = await connection_manager.connect(websocket, client_id)
         
-        # Send simple status message
-        await websocket.send_json({"status": "connected", "message": "WebSocket ready"})
-        print("📤 Sent status message")
+        # Send connection status in expected format
+        await websocket.send_json({
+            "type": "connection_status",
+            "status": "connected",
+            "message": "WebSocket ready"
+        })
+        print("📤 Sent connection status message")
         
         # Main processing loop
         while True:
             try:
-                # Receive binary audio data
-                audio_data = await websocket.receive_bytes()
+                # Receive message (can be text or binary)
+                message = await websocket.receive()
+                
+                # Handle text messages (JSON commands)
+                if "text" in message:
+                    try:
+                        command_data = json.loads(message["text"])
+                        print(f"📥 Received JSON command: {command_data}")
+                        
+                        # Handle session commands
+                        if command_data.get("type") == "session_command":
+                            command = command_data.get("command")
+                            session_id = command_data.get("session_id")
+                            
+                            if command == "start_session":
+                                # Generate new session ID
+                                new_session_id = str(uuid.uuid4())
+                                
+                                # Initialize session buffer
+                                connection_manager.session_buffers[new_session_id] = []
+                                
+                                # Set as current session for this connection
+                                if client_id in connection_manager.connection_info:
+                                    connection_manager.connection_info[client_id]["current_session_id"] = new_session_id
+                                
+                                # Send session response
+                                await websocket.send_json({
+                                    "type": "session_response",
+                                    "success": True,
+                                    "session_id": new_session_id,
+                                    "message": "Session started successfully"
+                                })
+                                print(f"✅ Started new session: {new_session_id}, buffer created")
+                                
+                            elif command == "end_session":
+                                print(f"🔚 Ending session: {session_id}")
+                                
+                                # Get buffered audio chunks
+                                if session_id in connection_manager.session_buffers:
+                                    chunks = connection_manager.session_buffers[session_id]
+                                    print(f"📦 Processing {len(chunks)} buffered chunks for session {session_id}")
+                                    
+                                    if len(chunks) > 0:
+                                        # Concatenate all chunks
+                                        combined_audio = b''.join(chunks)
+                                        print(f"🔄 Processing {len(combined_audio)} bytes of combined audio")
+                                        
+                                        try:
+                                            # Process combined audio
+                                            result = await audio_processor.process_audio_bytes_async(combined_audio)
+                                            
+                                            if isinstance(result, TranscriptResult):
+                                                # Send transcript result
+                                                await websocket.send_json({
+                                                    "type": "transcription_result",
+                                                    "result": result.model_dump(mode='json')
+                                                })
+                                                print(f"✅ Sent transcript: '{result.text[:50]}...'")
+                                            else:
+                                                print(f"⚠️ No transcript result from processing")
+                                                await websocket.send_json({
+                                                    "type": "session_response",
+                                                    "success": False,
+                                                    "session_id": session_id,
+                                                    "message": "Failed to process audio"
+                                                })
+                                        except Exception as proc_error:
+                                            print(f"❌ Processing error: {proc_error}")
+                                            await websocket.send_json({
+                                                "type": "session_response",
+                                                "success": False,
+                                                "session_id": session_id,
+                                                "message": f"Processing failed: {str(proc_error)}"
+                                            })
+                                    else:
+                                        print(f"⚠️ No audio chunks in session {session_id}")
+                                        await websocket.send_json({
+                                            "type": "session_response",
+                                            "success": False,
+                                            "session_id": session_id,
+                                            "message": "No audio data received"
+                                        })
+                                    
+                                    # Clean up buffer and clear current session
+                                    del connection_manager.session_buffers[session_id]
+                                    if client_id in connection_manager.connection_info:
+                                        connection_manager.connection_info[client_id]["current_session_id"] = None
+                                else:
+                                    print(f"⚠️ Session {session_id} not found in buffers")
+                                    await websocket.send_json({
+                                        "type": "session_response",
+                                        "success": False,
+                                        "session_id": session_id,
+                                        "message": "Session not found"
+                                    })
+                                
+                                print(f"✅ Session {session_id} ended")
+                            
+                            else:
+                                # Unknown command
+                                await websocket.send_json({
+                                    "type": "session_response",
+                                    "success": False,
+                                    "message": f"Unknown session command: {command}"
+                                })
+                                print(f"⚠️ Unknown session command: {command}")
+                        
+                        continue
+                    except json.JSONDecodeError:
+                        print(f"⚠️ Invalid JSON received: {message['text']}")
+                        continue
+                
+                # Handle disconnect message
+                if "type" in message and message["type"] == "websocket.disconnect":
+                    print(f"📴 Client disconnected with code: {message.get('code', 'unknown')}")
+                    break
+                
+                # Handle binary messages (audio data)
+                if "bytes" not in message:
+                    print(f"⚠️ Unexpected message format: {message}")
+                    continue
+                
+                audio_data = message["bytes"]
                 
                 websocket_logger.log_message_received(
                     message_type="audio_chunk",
@@ -179,6 +308,23 @@ async def websocket_endpoint(
                         message="Received empty audio data"
                     )
                     await connection_manager.send_error(websocket, error_response)
+                    continue
+                
+                # Check if there's an active session for buffering
+                current_session = None
+                if client_id in connection_manager.connection_info:
+                    current_session = connection_manager.connection_info[client_id].get("current_session_id")
+                
+                if current_session and current_session in connection_manager.session_buffers:
+                    # Buffer audio for session processing
+                    connection_manager.session_buffers[current_session].append(audio_data)
+                    print(f"📦 Buffered {len(audio_data)} bytes for session {current_session} (total chunks: {len(connection_manager.session_buffers[current_session])})")
+                    
+                    # Update connection stats
+                    if client_id in connection_manager.connection_info:
+                        connection_manager.connection_info[client_id]["processed_chunks"] += 1
+                    
+                    # Don't process now - wait for end_session
                     continue
                 
                 # Process audio chunk (OPTIMIZED: Use async version)
@@ -244,9 +390,21 @@ async def websocket_endpoint(
             except WebSocketDisconnect:
                 # Client disconnected
                 break
+            
+            except RuntimeError as e:
+                # WebSocket already closed (e.g., "Cannot call 'receive' once a disconnect message has been received")
+                error_msg = str(e)
+                if "disconnect" in error_msg.lower() or "close" in error_msg.lower():
+                    websocket_logger.log_error(
+                        error=f"WebSocket already closed: {error_msg}",
+                        error_type="websocket_closed"
+                    )
+                    break  # Exit loop immediately without trying to send
+                # Re-raise if it's a different RuntimeError
+                raise
                 
             except Exception as e:
-                # Handle processing errors
+                # Handle other processing errors
                 error_response = create_error_response(
                     error_type="processing_error",
                     message=f"Audio processing failed: {e}",
@@ -351,7 +509,7 @@ async def broadcast_message(
         
         for websocket in connection_manager.active_connections:
             try:
-                await connection_manager.send_message(websocket, message.dict())
+                await connection_manager.send_message(websocket, message.model_dump(mode='json'))
                 broadcast_count += 1
             except:
                 failed_count += 1

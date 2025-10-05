@@ -33,6 +33,7 @@ httpx==0.25.2             # HTTP client cho testing APIs
 # === Audio Processing ===
 librosa==0.10.1           # Audio analysis utilities (nếu cần advanced audio processing)
 soundfile==0.12.1         # Audio file I/O support
+# pydub removed - torchaudio+ffmpeg backend handles all formats directly
 
 # === Utilities ===
 python-dotenv==1.0.0      # Load environment variables từ .env file (if needed)

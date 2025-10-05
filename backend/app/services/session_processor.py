@@ -16,7 +16,7 @@ from pydub import AudioSegment
 from ..models.asr import LocalWav2Vec2ASR
 from ..models.classifier import LocalPhoBERTClassifier
 from ..schemas.audio import TranscriptResult
-from ..utils.bad_words_detector import detect_bad_words
+# Note: bad_words_detector not needed - using classifier.classify_ensemble() with built-in keyword detection
 
 
 @dataclass
@@ -234,17 +234,26 @@ class SessionAudioProcessor:
             
             print(f"ASR result: '{text}'")
             
-            # Detect bad words in the transcribed text
-            bad_words = detect_bad_words(text)
-            print(f"Bad words detection for '{text}': {bad_words}")
-            
-            # Classification: Analyze sentiment/toxicity
-            classification_result = self.classifier.classify(text)
+            # ✅ FIX: Use classify_ensemble() which includes keyword detection + bad_keywords
+            classification_result = self.classifier.classify_ensemble(text)
             label = classification_result.get('label', 'neutral')
-            confidence = classification_result.get('confidence_score', 0.0)  # FIXED: correct key name
+            confidence = classification_result.get('confidence_score', 0.0)
             
-            # Determine warning status - either from classifier or bad words
-            warning = label in ["toxic", "negative"] or len(bad_words) > 0
+            # ✅ Get bad keywords from ensemble classifier (already includes keyword detection)
+            bad_keywords = classification_result.get('bad_keywords', [])
+            toxicity_score = classification_result.get('keyword_toxicity_score', 0.0)
+            ensemble_applied = classification_result.get('ensemble_applied', False)
+            
+            # Debug logging
+            if bad_keywords:
+                print(f"� Ensemble detected {len(bad_keywords)} bad keywords: {bad_keywords}")
+                print(f"   ↳ Toxicity score: {toxicity_score:.2f}")
+                print(f"   ↳ Ensemble applied: {ensemble_applied}")
+            else:
+                print(f"✅ No bad keywords detected in: '{text}'")
+            
+            # Determine warning status - either from classifier or bad keywords
+            warning = label in ["toxic", "negative"] or len(bad_keywords) > 0
             
             # Calculate audio duration
             audio_duration = len(audio_array) / sample_rate
@@ -258,7 +267,7 @@ class SessionAudioProcessor:
                 sentiment_label=label,
                 sentiment_confidence=confidence,
                 warning=warning,
-                bad_keywords=bad_words if bad_words else None,
+                bad_keywords=bad_keywords if bad_keywords else None,
                 processing_time=processing_time,
                 real_time_factor=real_time_factor,
                 session_id=session_id,
@@ -267,7 +276,22 @@ class SessionAudioProcessor:
                 all_sentiment_scores=classification_result.get('scores', {})
             )
             
-            print(f"Session {session_id} processed: text='{text}', label={label}, warning={warning}, bad_words={bad_words}")
+            # Enhanced terminal logging for debugging
+            print(f"\n{'='*80}")
+            print(f"📊 SESSION RESULT: {session_id}")
+            print(f"{'='*80}")
+            print(f"📝 Transcript: '{text}'")
+            print(f"🏷️  Label: {label} (confidence: {confidence:.2%})")
+            print(f"⚠️  Warning: {warning}")
+            if bad_keywords:
+                print(f"🚫 Bad Keywords Detected: {bad_keywords}")
+                print(f"   ↳ Count: {len(bad_keywords)}")
+                print(f"   ↳ Toxicity Score: {toxicity_score:.2%}")
+            else:
+                print(f"✅ No bad keywords detected")
+            print(f"⏱️  Processing Time: {processing_time:.2f}s (RTF: {real_time_factor:.2f}x)")
+            print(f"🎵 Audio Duration: {audio_duration:.2f}s @ {sample_rate}Hz")
+            print(f"{'='*80}\n")
             
             return result
             

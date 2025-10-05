@@ -47,6 +47,8 @@ class VietnameseToxicKeywordDetector:
         'thằng khốn', 'con khốn',  # Removed standalone "khốn" to avoid false positives with "khôn" (smart)
         'kém cỏi', 'vô dụng', 'vô giátrị', 'bất tài',
         'xấu xa', 'độc ác', 'ác độc', 'tệ hại',
+        # Vietnamese informal pronouns (offensive when used aggressively)
+        'mày', 'tao',  # Common in confrontational/disrespectful contexts
     }
     
     TOXIC_KEYWORDS_LOW = {
@@ -280,7 +282,8 @@ class VietnameseToxicKeywordDetector:
         """
         matches = self.detect_keywords(text)
         toxicity_score = self.calculate_toxicity_score(matches)
-        bad_keywords = [match.keyword for match in matches]
+        # FIX: Remove duplicates by using set, then convert to sorted list
+        bad_keywords = sorted(list(set([match.keyword for match in matches])))
         
         return (toxicity_score >= threshold, toxicity_score, bad_keywords)
 

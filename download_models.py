@@ -13,11 +13,11 @@ def download_models():
     # Tạo thư mục models nếu chưa có
     os.makedirs("models", exist_ok=True)
     
-    # Model 1: PhoWhisper-base (Speech-to-Text)
-    # Thay thế wav2vec2-base-vietnamese-250h
-    # Ưu điểm: WER 5.28% vs 8.66%, auto punctuation, unlimited audio length
-    phowhisper_path = "./PhoWhisper-base"
-    print("🔄 Checking PhoWhisper-base (Speech-to-Text)...")
+    # Model 1: PhoWhisper-small (Speech-to-Text)
+    # Balanced accuracy and speed - better than base, faster than medium
+    # Ưu điểm: Good WER, auto punctuation, unlimited audio length, 244M params
+    phowhisper_path = "./PhoWhisper-small"
+    print("🔄 Checking PhoWhisper-small (Speech-to-Text)...")
     if os.path.exists(phowhisper_path) and os.path.isdir(phowhisper_path):
         # Kiểm tra xem có đầy đủ files cần thiết không
         required_files = ["config.json", "pytorch_model.bin", "tokenizer.json"]
@@ -26,29 +26,29 @@ def download_models():
             for f in required_files
         )
         if has_all_files:
-            print(f"✅ PhoWhisper-base đã tồn tại tại {phowhisper_path}, skip download!")
+            print(f"✅ PhoWhisper-small đã tồn tại tại {phowhisper_path}, skip download!")
         else:
-            print(f"⚠️ PhoWhisper-base chưa đầy đủ files, downloading...")
+            print(f"⚠️ PhoWhisper-small chưa đầy đủ files, downloading...")
             try:
                 snapshot_download(
-                    repo_id="vinai/PhoWhisper-base",
+                    repo_id="vinai/PhoWhisper-small",
                     local_dir=phowhisper_path,
                     local_dir_use_symlinks=False,
                     resume_download=True
                 )
-                print("✅ PhoWhisper-base downloaded successfully!")
+                print("✅ PhoWhisper-small downloaded successfully!")
             except Exception as e:
                 print(f"❌ Error downloading PhoWhisper: {e}")
     else:
-        print(f"📥 Downloading PhoWhisper-base from HuggingFace...")
+        print(f"📥 Downloading PhoWhisper-small from HuggingFace...")
         try:
             snapshot_download(
-                repo_id="vinai/PhoWhisper-base",
+                repo_id="vinai/PhoWhisper-small",
                 local_dir=phowhisper_path,
                 local_dir_use_symlinks=False,
                 resume_download=True
             )
-            print("✅ PhoWhisper-base downloaded successfully!")
+            print("✅ PhoWhisper-small downloaded successfully!")
         except Exception as e:
             print(f"❌ Error downloading PhoWhisper: {e}")
     
