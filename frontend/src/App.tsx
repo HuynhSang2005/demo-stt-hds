@@ -3,8 +3,6 @@ import { VietnameseSTTDashboard } from './components/VietnameseSTTDashboard'
 import { useWarningCleanup } from './stores/vietnameseSTT.store'
 import { config } from './lib/config'
 import type { TranscriptResult } from './types/transcript'
-import './App.css'
-import './styles/vietnamese.css'
 
 function App() {
   // Auto-cleanup recent warnings
