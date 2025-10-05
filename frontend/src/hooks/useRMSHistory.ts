@@ -1,34 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-
-/**
- * Props for useRMSHistory hook
- */
-interface UseRMSHistoryOptions {
-  /** Current RMS value from audio recorder */
-  currentRMS: number
-  /** Whether recording is active */
-  isRecording: boolean
-  /** Maximum number of RMS values to store (default: 20) */
-  maxHistory?: number
-  /** Update interval in milliseconds (default: 100ms) */
-  updateInterval?: number
-}
-
-/**
- * Hook return type
- */
-interface UseRMSHistoryReturn {
-  /** Array of historical RMS values */
-  rmsHistory: number[]
-  /** Current peak RMS value in history */
-  peakRMS: number
-  /** Average RMS value in history */
-  averageRMS: number
-  /** Whether voice is currently detected (RMS > threshold) */
-  isVoiceDetected: boolean
-  /** Clear RMS history */
-  clearHistory: () => void
-}
+import type { UseRMSHistoryOptions, UseRMSHistoryReturn } from '@/types/hooks'
 
 /**
  * Voice detection threshold

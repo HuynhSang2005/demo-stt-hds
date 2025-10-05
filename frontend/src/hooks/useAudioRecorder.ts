@@ -1,8 +1,25 @@
 /**
  * useAudioRecorder Hook - Simplified Version for Vietnamese STT
- * 
- * Custom React hook for audio recording with MediaRecorder API
- * Optimized for Vietnamese Speech-to-Text processing with real-time features
+ *
+ * Custom React hook for audio recording with MediaRecorder API.
+ * Optimized for Vietnamese Speech-to-Text processing with real-time features.
+ *
+ * @param options - Configuration options for the audio recorder
+ * @returns Object containing recording state, controls, and audio data
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   isRecording,
+ *   startRecording,
+ *   stopRecording,
+ *   currentVolume
+ * } = useAudioRecorder({
+ *   onAudioChunk: (chunk) => sendToWebSocket(chunk),
+ *   enableVolumeDetection: true,
+ *   chunkDuration: 1000
+ * })
+ * ```
  */
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
@@ -47,19 +64,20 @@ export interface UseAudioRecorderOptions {
 
 /**
  * Default audio configuration optimized for Vietnamese STT
- * Task 7 Optimizations:
- * - Changed to Opus codec for 30-40% better compression
- * - Reduced chunk duration from 2000ms to 1000ms for lower latency
- * - Prepared for VAD (Voice Activity Detection) integration
+ * Optimized settings for real-time speech recognition:
+ * - Opus codec for efficient compression
+ * - 1-second chunks for low latency processing
+ * - 16kHz mono audio required by Wav2Vec2 model
+ * - Voice activity detection integration ready
  */
 const DEFAULT_VIETNAMESE_STT_CONFIG: AudioRecorderConfig = {
   format: {
-    mimeType: 'audio/webm;codecs=opus', // Opus codec for superior compression & quality
+    mimeType: 'audio/wav', // WAV format for backend compatibility
     sampleRate: 16000, // Required for Wav2Vec2 Vietnamese model
     channels: 1, // Mono audio for better processing
   },
   chunkConfig: {
-    chunkDuration: 1000, // 1 second for lower latency (Task 7 optimization)
+    chunkDuration: 1000, // 1 second for lower latency processing
     maxChunkSize: 1024 * 256, // 256KB max chunk size (reduced for 1s chunks)
     overlap: 0.1, // 10% overlap for smoother processing
     bufferSize: 4096, // Audio buffer size
@@ -94,7 +112,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     onError,
     onVolumeChange,
     onPermissionChange,
-    chunkDuration = 1000, // Task 7: Changed from 2000ms to 1000ms for lower latency
+    chunkDuration = 1000, // 1 second chunks for lower latency
     enableVolumeDetection = true,
     maxRecordingTime = 300000,
     autoStart = false,
@@ -134,6 +152,12 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
   const volumeDetectionRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
   const chunkIndexRef = useRef<number>(0)
+  const isRecordingRef = useRef<boolean>(false) // Ref for volume detection closure to avoid stale state
+
+  // Sync ref with recording state for accurate volume detection
+  useEffect(() => {
+    isRecordingRef.current = isRecording
+  }, [isRecording])
 
   /**
    * Get available audio devices
@@ -172,10 +196,18 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       const constraints: MediaStreamConstraints = {
         audio: {
           deviceId: preferredDeviceId ? { exact: preferredDeviceId } : undefined,
-          // CRITICAL FIX: Disable aggressive audio processing on Bluetooth headsets
-          // These features reduce amplitude too much, causing low RMS values
-          sampleRate: { ideal: 48000 },  // Higher sample rate for better quality
-          channelCount: config.format.channels,
+          // Request 16kHz native sample rate to match Wav2Vec2 model requirements
+          // Browser may fall back to 48kHz if 16kHz is not supported
+          sampleRate: {
+            ideal: 16000,  // Target for Wav2Vec2 model
+            min: 16000,    // Minimum acceptable
+            max: 48000     // Maximum acceptable
+          },
+          channelCount: {
+            ideal: config.format.channels,
+            max: config.format.channels
+          },
+          // Audio processing settings optimized for speech
           echoCancellation: false,  // Changed from true - reduces amplitude
           noiseSuppression: false,  // Changed from true - kills voice activity
           autoGainControl: false,   // Changed from true - Bluetooth has its own AGC
@@ -186,6 +218,28 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       console.log('[AudioRecorder] Requesting new media stream with constraints:', constraints)
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       console.log('[AudioRecorder] Got new stream:', stream.id, 'with', stream.getAudioTracks().length, 'audio tracks')
+      
+      // Log actual sample rate provided by browser for debugging
+      const audioTrack = stream.getAudioTracks()[0]
+      if (audioTrack) {
+        const settings = audioTrack.getSettings()
+        console.log('[AudioRecorder] 🎯 Actual audio settings from browser:', {
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+          deviceId: settings.deviceId,
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+          autoGainControl: settings.autoGainControl
+        })
+        
+        // Log sample rate (no warning needed - audio-converter.ts handles resampling)
+        if (settings.sampleRate) {
+          console.log(
+            `[AudioRecorder] 🎤 Browser native sample rate: ${settings.sampleRate}Hz ` +
+            `(audio-converter.ts will resample to 16kHz for ASR)`
+          )
+        }
+      }
       
       setPermissionGranted(true)
       onPermissionChange?.(true)
@@ -253,10 +307,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       const analyser = audioContext.createAnalyser()
       const source = audioContext.createMediaStreamSource(stream)
       
-      // CRITICAL FIX: Add gain node to amplify low-amplitude Bluetooth audio
-      // Bluetooth headsets often have aggressive noise suppression
+      // Add gain node to amplify low-amplitude Bluetooth audio
+      // Bluetooth headsets often have aggressive noise suppression that reduces signal levels
       const gainNode = audioContext.createGain()
-      gainNode.gain.value = 2.5  // Amplify by 2.5x for better VAD detection
+      gainNode.gain.value = 2.5  // Amplify by 2.5x for better voice activity detection
       
       // Optimized for time-domain VAD (waveform analysis)
       analyser.fftSize = 2048 // Increased from 256 for better time resolution
@@ -286,10 +340,16 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         const rms = Math.sqrt(sum / dataArray.length)
         const volume = Math.min(1, rms / 128) // Normalize to 0-1
 
+        // Debug: Log volume updates (5% sample rate)
+        if (import.meta.env.DEV && Math.random() < 0.05) {
+          console.log(`[Hook] 🎤 Volume detected: RMS=${rms.toFixed(2)}, normalized=${(volume * 100).toFixed(1)}%`)
+        }
+
         setCurrentVolume(volume)
         onVolumeChange?.(volume)
 
-        if (isRecording) {
+        // Use ref instead of state to avoid stale closure in timeout callback
+        if (isRecordingRef.current) {
           volumeDetectionRef.current = window.setTimeout(detectVolume, 100)
         }
       }
@@ -298,14 +358,24 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     } catch (err) {
       console.warn('Failed to setup audio context for volume detection:', err)
     }
-  }, [enableVolumeDetection, isRecording, onVolumeChange])
+  }, [enableVolumeDetection, onVolumeChange])
+
+  /**
+   * Debug logging helper (defined inline for VAD)
+   */
+  const debugLog = useCallback((message: string) => {
+    // Only log in development mode (Vite sets import.meta.env.DEV)
+    if (import.meta.env.DEV) {
+      console.log(`[AudioRecorder] ${message}`)
+    }
+  }, [])
 
   /**
    * Check if audio chunk contains voice activity (VAD)
-   * Task 7: Skip silent chunks to reduce bandwidth and processing
-   * 
-   * IMPROVED: Uses time-domain analysis (waveform amplitude) instead of frequency-domain
-   * This works MUCH BETTER for detecting high-pitch voices and abnormal tones
+   * Skip silent chunks to reduce bandwidth and processing overhead
+   *
+   * Uses time-domain analysis (waveform amplitude) for better detection
+   * of high-pitch voices and abnormal tones compared to frequency-domain methods
    */
   const checkVoiceActivity = useCallback((): boolean => {
     if (!analyserRef.current) return true // If no analyser, process all chunks
@@ -327,9 +397,9 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     }
     let rms = Math.sqrt(sum / dataArray.length)
     
-    // CRITICAL FIX: Apply gain compensation for low-amplitude Bluetooth audio
-    // Bluetooth headsets often have aggressive noise suppression that reduces amplitude
-    // Amplify the RMS by 2x to compensate
+    // Apply gain compensation for low-amplitude Bluetooth audio
+    // Bluetooth headsets often have aggressive noise suppression that reduces signal levels
+    // Amplify the RMS by 2x to compensate for audio processing artifacts
     rms = rms * 2.0
 
     // ULTRA-SENSITIVE threshold for Bluetooth headsets with heavy audio processing
@@ -344,17 +414,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
     debugLog(`VAD check: RMS=${rms.toFixed(2)} (max=${maxAmplitude.toFixed(1)}), hasVoice=${finalHasVoice}`)
     return finalHasVoice
-  }, [])
-
-  /**
-   * Debug logging helper (defined inline for VAD)
-   */
-  const debugLog = useCallback((message: string) => {
-    // Only log in development mode (Vite sets import.meta.env.DEV)
-    if (import.meta.env.DEV) {
-      console.log(`[AudioRecorder] ${message}`)
-    }
-  }, [])
+  }, [debugLog])
 
   /**
    * Create audio chunk from blob data
@@ -579,6 +639,8 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     getMediaStream,
     setupAudioContext,
     createAudioChunk,
+    checkVoiceActivity,
+    debugLog,
     onAudioChunk,
     onRecordingStart,
     onRecordingStop,
@@ -698,7 +760,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     return () => {
       isMounted = false
     }
-  }, []) // Empty dependency array - run only once on mount
+  }, [onError, onPermissionChange]) // Include callback dependencies
 
   // Cleanup on unmount
   useEffect(() => {

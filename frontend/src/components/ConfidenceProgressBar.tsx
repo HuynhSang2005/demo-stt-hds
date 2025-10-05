@@ -1,17 +1,6 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
-
-/**
- * Props for ConfidenceProgressBar component
- */
-interface ConfidenceProgressBarProps {
-  confidence: number // 0.0 - 1.0
-  showLabel?: boolean
-  showPercentage?: boolean
-  size?: 'sm' | 'md' | 'lg'
-  animated?: boolean
-  className?: string
-}
+import type { ConfidenceProgressBarProps } from '@/types/component-props'
 
 /**
  * Get color classes based on confidence level

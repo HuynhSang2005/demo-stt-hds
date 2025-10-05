@@ -13,6 +13,7 @@ import {
   useCurrentTranscript 
 } from '@/stores/vietnameseSTT.store'
 import type { TranscriptEntry } from '@/stores/vietnameseSTT.store'
+import type { TranscriptDisplayProps } from '@/types/component-props'
 import { ConfidenceProgressBar } from './ConfidenceProgressBar'
 import { SentimentBadge } from './SentimentBadge'
 import { ConfidenceBreakdown } from './ConfidenceBreakdown'
@@ -20,24 +21,12 @@ import { ToxicWarningAlert } from './ToxicWarningAlert'
 import { BadKeywordsList } from './BadKeywordsList'
 
 /**
- * Props for TranscriptDisplay component
- */
-interface TranscriptDisplayProps {
-  className?: string
-  showSearch?: boolean
-  showFilters?: boolean
-  autoScroll?: boolean
-  maxHeight?: string
-  onTranscriptSelect?: (transcript: TranscriptEntry | null) => void
-}
-
-/**
  * Use Vietnamese formatting utilities
  */
 
 /**
  * Individual transcript entry component
- * Task 9: Memoized to prevent unnecessary re-renders
+ * Memoized to prevent unnecessary re-renders when parent state changes
  */
 const TranscriptEntryComponent = React.memo<{
   transcript: import('@/stores/vietnameseSTT.store').TranscriptEntry
@@ -188,7 +177,7 @@ const TranscriptEntryComponent = React.memo<{
     </div>
   )
 }, (prevProps, nextProps) => {
-  // Task 9: Custom comparison function for React.memo
+  // Custom comparison function for React.memo optimization
   // Only re-render if transcript content, selection, or warning state changes
   return (
     prevProps.transcript.id === nextProps.transcript.id &&
@@ -211,6 +200,7 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
   showSearch = true,
   showFilters = true,
   autoScroll = true,
+  autoScrollPosition = 'top', // Default: scroll to top to show newest transcripts
   maxHeight = "500px",
   onTranscriptSelect,
 }) => {
@@ -230,18 +220,27 @@ export const TranscriptDisplay: React.FC<TranscriptDisplayProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const lastTranscriptCount = useRef(transcripts.length)
   
-  // Task 9: Local state for debounced search input
+  // Local state for debounced search input to improve UX
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery)
   const searchDebounceTimer = useRef<number | null>(null)
   
-  // Auto-scroll to bottom when new transcripts arrive
+  // Auto-scroll when new transcripts arrive
+  // 'top': scroll to top (shows newest first - recommended for reverse chronological order)
+  // 'bottom': scroll to bottom (shows oldest first - traditional chat style)
   useEffect(() => {
     if (autoScroll && transcripts.length > lastTranscriptCount.current && containerRef.current) {
       const container = containerRef.current
-      container.scrollTop = container.scrollHeight
+      
+      if (autoScrollPosition === 'top') {
+        // Scroll to top to show newest transcript (default behavior)
+        container.scrollTop = 0
+      } else {
+        // Scroll to bottom for traditional chat-style display
+        container.scrollTop = container.scrollHeight
+      }
     }
     lastTranscriptCount.current = transcripts.length
-  }, [transcripts.length, autoScroll])
+  }, [transcripts.length, autoScroll, autoScrollPosition])
   
   // Handle transcript selection
   const handleTranscriptSelect = useCallback((transcript: TranscriptEntry) => {

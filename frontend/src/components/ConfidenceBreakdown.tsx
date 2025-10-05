@@ -1,19 +1,7 @@
 import React from 'react'
 import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-/**
- * Props for ConfidenceBreakdown component
- */
-interface ConfidenceBreakdownProps {
-  asrConfidence: number // 0.0 - 1.0, ASR (speech recognition) confidence
-  sentimentConfidence: number // 0.0 - 1.0, sentiment classification confidence
-  overallConfidence?: number // Optional pre-calculated overall confidence
-  showFormula?: boolean // Show the calculation formula
-  showWeights?: boolean // Show ASR 60% + Sentiment 40% weights
-  layout?: 'horizontal' | 'vertical'
-  className?: string
-}
+import type { ConfidenceBreakdownProps } from '@/types/component-props'
 
 /**
  * Configuration for confidence weights

@@ -1,19 +1,6 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
-
-/**
- * Props for RecordingStatusIndicator component
- */
-interface RecordingStatusIndicatorProps {
-  /** Whether recording is currently active */
-  isRecording: boolean
-  /** Current audio volume level (0.0 to 1.0) */
-  currentVolume: number
-  /** Whether voice is currently detected (based on volume threshold) */
-  isVoiceDetected: boolean
-  /** Optional className for custom styling */
-  className?: string
-}
+import type { RecordingStatusIndicatorProps } from '@/types/component-props'
 
 /**
  * Recording Status Indicator Component
@@ -52,7 +39,7 @@ export const RecordingStatusIndicator: React.FC<RecordingStatusIndicatorProps> =
               <div className="absolute w-3 h-3 bg-red-600 rounded-full animate-ping opacity-75" />
             </div>
             <span className="text-red-600 font-semibold text-sm">
-              🔴 Đang ghi âm...
+              Đang ghi âm...
             </span>
           </>
         ) : (
@@ -60,7 +47,7 @@ export const RecordingStatusIndicator: React.FC<RecordingStatusIndicatorProps> =
             {/* Gray dot when not recording */}
             <div className="w-3 h-3 bg-gray-400 rounded-full" />
             <span className="text-gray-500 font-medium text-sm">
-              ⚪ Chưa ghi âm
+              Chưa ghi âm
             </span>
           </>
         )}

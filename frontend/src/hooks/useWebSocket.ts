@@ -25,8 +25,59 @@
  *     if (result.warning) {
  *       showWarning(result.label)
  *     }
- *   },
- *   autoReconnect: true,
+ *         if (state.s      if (state.s      if (state.socket) {
+        state.socket.close()
+        state.socket = null
+      }
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer)
+        state.reconnectTimer = null
+      }
+      if (state.connectionTimer) {
+        clearTimeout(state.connectionTimer)
+        state.connectionTimer = null
+      }
+      // Task 8: Clear ping timer
+      if (state.pingTimer) {
+        clearInterval(state.pingTimer)
+        state.pingTimer = null
+      }
+      // Task 8: Clear request queue
+      state.requestQueue = []tate.socket.close()
+        state.socket = null
+      }
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer)
+        state.reconnectTimer = null
+      }
+      if (state.connectionTimer) {
+        clearTimeout(state.connectionTimer)
+        state.connectionTimer = null
+      }
+      // Task 8: Clear ping timer
+      if (state.pingTimer) {
+        clearInterval(state.pingTimer)
+        state.pingTimer = null
+      }
+      // Task 8: Clear request queue
+      state.requestQueue = []tate.socket.close()
+        state.socket = null
+      }
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer)
+        state.reconnectTimer = null
+      }
+      if (state.connectionTimer) {
+        clearTimeout(state.connectionTimer)
+        state.connectionTimer = null
+      }
+      // Task 8: Clear ping timer
+      if (state.pingTimer) {
+        clearInterval(state.pingTimer)
+        state.pingTimer = null
+      }
+      // Task 8: Clear request queue
+      state.requestQueue = []ect: true,
  *   maxReconnectAttempts: 5
  * })
  * ```
@@ -43,6 +94,7 @@ import type {
   ErrorMessage,
   ConnectionStatusMessage
 } from '@/types/websocket'
+import type { ConnectionState } from '@/types/hooks'
 // TranscriptResult handled via callback pattern
 import type { WebSocketError } from '@/types/error'
 
@@ -72,20 +124,8 @@ export interface UseWebSocketOptions extends Partial<WebSocketEventHandlers> {
 
 /**
  * Internal connection state tracking
- * Task 8: Enhanced with health check and request queue support
+ * Includes health check monitoring and request queuing during reconnection
  */
-interface ConnectionState {
-  socket: WebSocket | null
-  reconnectAttempts: number
-  reconnectTimer: number | null
-  connectionTimer: number | null
-  pingTimer: number | null // Task 8: Ping/pong health check timer
-  lastPingTime: number | null // Task 8: Last ping timestamp
-  lastPongTime: number | null // Task 8: Last pong received
-  lastConnectedAt: number | null
-  lastDisconnectedAt: number | null
-  requestQueue: Array<{data: ArrayBuffer | string, timestamp: number}> // Task 8: Queue for requests during reconnection
-}
 
 /**
  * Default Vietnamese STT WebSocket configuration
@@ -133,7 +173,7 @@ export function useWebSocket(
   // State for managing transcript results via callback
 
   // Connection state ref (mutable without causing re-renders)
-  // Task 8: Enhanced with ping/pong health checks and request queue
+  // Includes ping/pong health checks and request queuing during reconnection
   const connectionStateRef = useRef<ConnectionState>({
     socket: null,
     reconnectAttempts: 0,
@@ -269,7 +309,7 @@ export function useWebSocket(
         }
 
         case 'pong': {
-          // Task 8: Handle pong response for health check
+          // Handle pong response for health check monitoring
           const state = connectionStateRef.current
           state.lastPongTime = Date.now()
           const latency = message.timestamp ? state.lastPongTime - (message.timestamp as number) : 0
@@ -305,11 +345,11 @@ export function useWebSocket(
 
   /**
    * Calculate reconnect delay with exponential backoff
-   * Task 8: Enhanced jitter calculation (10-30% range for better distribution)
+   * Uses jitter (10-30% random variation) for better connection distribution
    */
   const calculateReconnectDelay = useCallback((attempt: number): number => {
     if (!exponentialBackoff) {
-      // Task 8: Add jitter even for fixed delays
+      // Add jitter even for fixed delays to avoid thundering herd
       const jitter = reconnectDelay * (0.1 + Math.random() * 0.2) // 10-30% jitter
       return Math.floor(reconnectDelay + jitter)
     }
@@ -318,8 +358,8 @@ export function useWebSocket(
       reconnectDelay * Math.pow(2, attempt),
       maxReconnectDelay
     )
-    
-    // Task 8: Enhanced jitter calculation - 10-30% random variation
+
+    // Apply jitter to exponential backoff for better distribution
     const jitter = delay * (0.1 + Math.random() * 0.2)
     return Math.floor(delay + jitter)
   }, [exponentialBackoff, reconnectDelay, maxReconnectDelay])
@@ -612,6 +652,9 @@ export function useWebSocket(
     updateConnectionStatus,
     clearReconnectTimer,
     clearConnectionTimer,
+    clearPingTimer,
+    processRequestQueue,
+    startHealthCheck,
     attemptReconnect,
     handleMessage,
     createWebSocketError,
@@ -793,29 +836,31 @@ export function useWebSocket(
    * Task 8: Enhanced with ping timer cleanup
    */
   useEffect(() => {
+    const state = connectionStateRef.current // Copy ref value to avoid stale closure
+
     return () => {
       debugLog('Cleaning up WebSocket hook - preventing further connections')
       shouldConnect.current = false // Prevent further connection attempts
       // Clean up without causing infinite loops
-      if (connectionStateRef.current.socket) {
-        connectionStateRef.current.socket.close()
-        connectionStateRef.current.socket = null
+      if (state.socket) {
+        state.socket.close()
+        state.socket = null
       }
-      if (connectionStateRef.current.reconnectTimer) {
-        clearTimeout(connectionStateRef.current.reconnectTimer)
-        connectionStateRef.current.reconnectTimer = null
+      if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer)
+        state.reconnectTimer = null
       }
-      if (connectionStateRef.current.connectionTimer) {
-        clearTimeout(connectionStateRef.current.connectionTimer)
-        connectionStateRef.current.connectionTimer = null
+      if (state.connectionTimer) {
+        clearTimeout(state.connectionTimer)
+        state.connectionTimer = null
       }
       // Task 8: Clear ping timer
-      if (connectionStateRef.current.pingTimer) {
-        clearInterval(connectionStateRef.current.pingTimer)
-        connectionStateRef.current.pingTimer = null
+      if (state.pingTimer) {
+        clearInterval(state.pingTimer)
+        state.pingTimer = null
       }
       // Task 8: Clear request queue
-      connectionStateRef.current.requestQueue = []
+      state.requestQueue = []
       setConnectionStatus('disconnected')
     }
   }, [debugLog]) // Empty dependency array to prevent StrictMode issues

@@ -220,7 +220,7 @@ describe('Schema Compatibility - Frontend ↔ Backend', () => {
 // ============================================================================
 
 describe('WebSocket Integration - Mock Backend', () => {
-  let mockWs: any
+  let mockWs: any // eslint-disable-line @typescript-eslint/no-explicit-any
   
   beforeEach(() => {
     // Mock WebSocket

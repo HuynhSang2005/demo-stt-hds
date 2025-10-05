@@ -1,20 +1,7 @@
 import React from 'react'
 import { AlertTriangle, AlertOctagon, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { VietnameseSentiment } from '@/types/transcript'
-
-/**
- * Props for ToxicWarningAlert component
- */
-interface ToxicWarningAlertProps {
-  sentiment: VietnameseSentiment
-  text?: string // Optional warning message
-  badKeywordsCount?: number // Number of bad keywords detected
-  onDismiss?: () => void // Optional dismiss handler
-  showIcon?: boolean // Show warning icon (default: true)
-  variant?: 'banner' | 'inline' | 'card' // Display style
-  className?: string
-}
+import type { ToxicWarningAlertProps } from '@/types/component-props'
 
 /**
  * Warning level configuration

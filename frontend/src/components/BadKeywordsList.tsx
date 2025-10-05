@@ -1,18 +1,7 @@
 import React from 'react'
 import { XCircle, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-/**
- * Props for BadKeywordsList component
- */
-interface BadKeywordsListProps {
-  keywords: string[] // Array of detected bad keywords
-  showBlurred?: boolean // Show keywords blurred initially (default: false)
-  maxDisplay?: number // Maximum keywords to display before "show more" (default: no limit)
-  variant?: 'default' | 'compact' | 'detailed' // Display style
-  severity?: 'high' | 'medium' // Severity level affects color
-  className?: string
-}
+import type { BadKeywordsListProps } from '@/types/component-props'
 
 /**
  * Individual keyword badge component

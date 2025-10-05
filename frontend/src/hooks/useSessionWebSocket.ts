@@ -1,23 +1,7 @@
-import { useRef, useCallback, useState, useEffect } from 'react'
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react'
 import { webSocketManager, type ConnectionStatus } from '@/lib/websocket-manager'
 import type { TranscriptResult } from '@/types/transcript'
-
-interface SessionWebSocketOptions {
-  onTranscriptResult?: (result: TranscriptResult) => void
-  onConnectionStatusChange?: (status: string, reason?: string) => void
-  onError?: (error: Event) => void
-  autoReconnect?: boolean
-  maxReconnectAttempts?: number
-  enableDebug?: boolean
-}
-
-interface SessionResponse {
-  type: string
-  success?: boolean
-  session_id?: string
-  message?: string
-  session_info?: any
-}
+import type { SessionWebSocketOptions, SessionResponse } from '@/types/hooks'
 
 export const useSessionWebSocket = (
   url: string,
@@ -38,8 +22,24 @@ export const useSessionWebSocket = (
   
   const connectionIdRef = useRef<string | null>(null)
   const isMounted = useRef(true)
+  
+  // Store latest callbacks in refs to avoid recreating connectToWebSocket
+  const handlersRef = useRef({
+    onTranscriptResult,
+    onConnectionStatusChange,
+    onError
+  })
 
-  const log = useCallback((message: string, ...args: any[]) => {
+  // Update refs when callbacks change
+  useEffect(() => {
+    handlersRef.current = {
+      onTranscriptResult,
+      onConnectionStatusChange,
+      onError
+    }
+  }, [onTranscriptResult, onConnectionStatusChange, onError])
+
+  const log = useCallback((message: string, ...args: unknown[]) => {
     if (enableDebug) {
       console.log(`[SessionWebSocket:${connectionIdRef.current}]`, message, ...args)
     }
@@ -56,42 +56,16 @@ export const useSessionWebSocket = (
     }
   }, [])
 
-  // Connection management
-  const connectToWebSocket = useCallback(() => {
-    if (!isMounted.current) return
-    
-    // Clean up existing connection
-    if (connectionIdRef.current) {
-      webSocketManager.removeConnection(connectionIdRef.current)
-    }
-    
-    // Create new connection
-    const connectionId = webSocketManager.createConnection(url, {
-      autoReconnect,
-      maxReconnectAttempts
-    })
-    
-    connectionIdRef.current = connectionId
-    
-    // Set up event listeners
-    webSocketManager.addStatusListener(connectionId, handleStatusChange)
-    webSocketManager.addMessageListener(connectionId, handleMessage)
-    webSocketManager.addErrorListener(connectionId, handleError)
-    
-    // Connect
-    webSocketManager.connect(connectionId)
-  }, [url, autoReconnect, maxReconnectAttempts])
-
-  // Status change handler
+  // Status change handler - uses ref for callbacks
   const handleStatusChange = useCallback((status: ConnectionStatus, reason?: string) => {
     if (!isMounted.current) return
     
     log('Status changed:', status, reason)
     setIsConnected(status === 'connected')
-    onConnectionStatusChange?.(status, reason)
-  }, [log, onConnectionStatusChange])
+    handlersRef.current.onConnectionStatusChange?.(status, reason)
+  }, [log])
 
-  // Message handler
+  // Message handler - uses ref for callbacks
   const handleMessage = useCallback((event: MessageEvent) => {
     if (!isMounted.current) return
     
@@ -101,29 +75,60 @@ export const useSessionWebSocket = (
 
       // Handle different message types
       if (data.type === 'transcription_result' && data.result) {
-        onTranscriptResult?.(data.result)
+        handlersRef.current.onTranscriptResult?.(data.result)
       } else if (data.type === 'connection_status') {
-        onConnectionStatusChange?.(data.status, data.message)
+        handlersRef.current.onConnectionStatusChange?.(data.status, data.message)
       } else if (data.type === 'processing_status') {
         log('Processing status:', data)
       } else if (data.type === 'error') {
         const error = new Error(data.message || 'WebSocket error')
         setLastError(error)
       }
-    } catch (error) {
+    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
       log('Failed to parse message:', event.data)
     }
-  }, [log, onTranscriptResult, onConnectionStatusChange])
+  }, [log])
 
-  // Error handler
+  // Error handler - uses ref for callbacks
   const handleError = useCallback((event: Event) => {
     if (!isMounted.current) return
     
     log('WebSocket error:', event)
     const error = new Error('WebSocket connection error')
     setLastError(error)
-    onError?.(event)
-  }, [log, onError])
+    handlersRef.current.onError?.(event)
+  }, [log])
+
+  // Connection management - stable handlers don't cause reconnection
+  const connectToWebSocket = useCallback(() => {
+    if (!isMounted.current) return
+    
+    // DON'T clean up existing connection here - causes infinite loop!
+    // Only create new connection if none exists
+    if (!connectionIdRef.current) {
+      // Create new connection
+      const connectionId = webSocketManager.createConnection(url, {
+        autoReconnect,
+        maxReconnectAttempts
+      })
+      
+      connectionIdRef.current = connectionId
+      
+      // Set up event listeners (handlers are stable now)
+      webSocketManager.addStatusListener(connectionId, handleStatusChange)
+      webSocketManager.addMessageListener(connectionId, handleMessage)
+      webSocketManager.addErrorListener(connectionId, handleError)
+      
+      // Connect
+      webSocketManager.connect(connectionId)
+    } else {
+      // Connection already exists, just reconnect if needed
+      const connection = webSocketManager['connections'].get(connectionIdRef.current)
+      if (connection && connection.status !== 'connected' && connection.status !== 'connecting') {
+        webSocketManager.connect(connectionIdRef.current)
+      }
+    }
+  }, [url, autoReconnect, maxReconnectAttempts, handleStatusChange, handleMessage, handleError])
 
   // Send session command
   const sendSessionCommand = useCallback((command: string, sessionId?: string) => {
@@ -261,7 +266,7 @@ export const useSessionWebSocket = (
               }
               resolve(null)
             }
-          } catch (error) {
+          } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
             // Ignore non-JSON messages
           }
         }
@@ -279,7 +284,7 @@ export const useSessionWebSocket = (
           resolve(null)
         }, 10000)
         
-      } catch (error) {
+      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
         setCurrentSessionId(null)
         resolve(null)
       }
@@ -326,7 +331,8 @@ export const useSessionWebSocket = (
     }
   }, [connectToWebSocket, log])
 
-  return {
+  // Memoize return object to prevent parent re-renders
+  return useMemo(() => ({
     isConnected,
     lastError,
     currentSessionId,
@@ -336,5 +342,5 @@ export const useSessionWebSocket = (
     startSession,
     endSession,
     sendSessionCommand
-  }
+  }), [isConnected, lastError, currentSessionId, connectToWebSocket, disconnect, sendAudioChunk, startSession, endSession, sendSessionCommand])
 }

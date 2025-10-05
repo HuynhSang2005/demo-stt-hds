@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { Mic, Settings, Download, Trash2, RefreshCw } from 'lucide-react'
+import { Mic, Settings, Trash2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { config } from '@/lib/config'
 import { TranscriptDisplay } from '@/components/TranscriptDisplay'
 import { AudioRecorder } from '@/components/AudioRecorder'
 import { WarningIndicator } from '@/components/WarningIndicator'
-import type { TranscriptResult } from '@/types/transcript'
 import type { TranscriptEntry } from '@/stores/vietnameseSTT.store'
+import type { VietnameseSTTDashboardProps } from '@/types/component-props'
 import {
   useConnectionStatus,
   useCurrentSession,
@@ -17,16 +17,6 @@ import {
 } from '@/stores/vietnameseSTT.store'
 
 /**
- * Props for Vietnamese STT Dashboard
- */
-interface VietnameseSTTDashboardProps {
-  className?: string
-  websocketUrl?: string
-  title?: string
-  showSettings?: boolean
-  onExport?: (transcripts: TranscriptResult[]) => void
-  onError?: (error: Error) => void
-}
 
 /**
  * Connection status indicator
@@ -156,8 +146,10 @@ const SessionStats: React.FC<{ className?: string }> = ({ className }) => {
 }
 
 /**
- * Export functionality
+ * Export functionality - DISABLED per user request
+ * Keep code commented for potential future use
  */
+/*
 const useExportTranscripts = () => {
   const transcripts = useTranscripts()
   
@@ -202,6 +194,7 @@ const useExportTranscripts = () => {
   
   return { exportAsJSON, exportAsText }
 }
+*/
 
 /**
  * Vietnamese STT Dashboard Component
@@ -212,7 +205,6 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
   websocketUrl = config.backend.wsUrl,
   title = 'Vietnamese Speech-to-Text với Phát hiện Độc hại',
   showSettings: showSettingsButton = true,
-  onExport,
   onError,
 }) => {
   const [showSettings, setShowSettings] = useState(false)
@@ -229,8 +221,8 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
     ? transcripts.find(t => t.id === selectedTranscriptId) || null
     : null
   
-  // Export functionality
-  const { exportAsJSON, exportAsText } = useExportTranscripts()
+  // Export functionality (kept for future use, not exposed in UI)
+  // const { exportAsJSON, exportAsText } = useExportTranscripts()
   
   // Stabilize websocketUrl to prevent child component re-renders
   const stableWebsocketUrl = React.useMemo(() => websocketUrl, [websocketUrl])
@@ -248,28 +240,6 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
     }
   }, [clearTranscripts, selectTranscript])
   
-  // Handle export
-  const handleExport = useCallback((format: 'json' | 'text') => {
-    if (transcripts.length === 0) {
-      alert('Không có bản ghi nào để xuất')
-      return
-    }
-    
-    try {
-      if (format === 'json') {
-        exportAsJSON()
-      } else {
-        exportAsText()
-      }
-      
-      // Note: onExport callback disabled due to type mismatch
-      // TranscriptEntry has different structure than TranscriptResult
-      // onExport?.(transcripts)
-    } catch (error) {
-      console.error('Export error:', error)
-      onError?.(error as Error)
-    }
-  }, [transcripts, exportAsJSON, exportAsText, onExport, onError])
   
   // Handle settings toggle
   const handleSettingsToggle = useCallback(() => {
@@ -277,7 +247,7 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
   }, [showSettings])
   
   // Handle refresh
-  const handleRefresh = useCallback(() => {
+ const handleRefresh = useCallback(() => {
     window.location.reload()
   }, [])
   
@@ -313,34 +283,6 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
             
             {/* Action buttons */}
             <div className="flex items-center gap-3">
-              {/* Export dropdown */}
-              <div className="relative group">
-                <button 
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  disabled={transcripts.length === 0}
-                >
-                  <Download className="w-4 h-4" />
-                  Xuất file
-                </button>
-                
-                {transcripts.length > 0 && (
-                  <div className="absolute right-0 top-full mt-1 invisible group-hover:visible bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
-                    <button
-                      onClick={() => handleExport('json')}
-                      className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      JSON (.json)
-                    </button>
-                    <button
-                      onClick={() => handleExport('text')}
-                      className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Text (.txt)
-                    </button>
-                  </div>
-                )}
-              </div>
-              
               {/* Clear button */}
               <button
                 onClick={handleClearTranscripts}
@@ -384,7 +326,7 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Warning indicator */}
         {warnings.total > 0 && (
-          <div className="mb-6">
+          <div className="mb-6 mx-auto max-w-3xl">
             <WarningIndicator 
               showDetails 
               showHistory
@@ -502,6 +444,28 @@ export const VietnameseSTTDashboard: React.FC<VietnameseSTTDashboardProps> = ({
                           {selectedTranscript.warning ? 'Có' : 'Không'}
                         </dd>
                       </div>
+                      {(() => {
+                        // Debug logging
+                        if (import.meta.env.DEV) {
+                          console.log('[Dashboard] Selected transcript bad_keywords:', selectedTranscript.bad_keywords)
+                        }
+                        return null
+                      })()}
+                      {selectedTranscript.bad_keywords && selectedTranscript.bad_keywords.length > 0 && (
+                        <div className="col-span-2 pt-2 border-t border-gray-200">
+                          <dt className="text-gray-600 mb-2">Từ khóa độc hại:</dt>
+                          <dd className="flex flex-wrap gap-2">
+                            {selectedTranscript.bad_keywords.map((key: string, idx: number) => (
+                              <span 
+                                key={idx}
+                                className="inline-flex items-center px-2 py-1 rounded-md bg-red-100 text-red-800 text-xs font-medium"
+                              >
+                                🚫 {key}
+                              </span>
+                            ))}
+                          </dd>
+                        </div>
+                      )}
                     </dl>
                   </div>
                 </div>

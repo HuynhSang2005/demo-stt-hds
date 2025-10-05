@@ -1,19 +1,7 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
 import type { VietnameseSentiment } from '@/types/transcript'
-
-/**
- * Props for SentimentBadge component
- */
-interface SentimentBadgeProps {
-  sentiment: VietnameseSentiment
-  confidence?: number // Optional confidence score 0.0 - 1.0
-  showEmoji?: boolean
-  showConfidence?: boolean
-  size?: 'sm' | 'md' | 'lg'
-  variant?: 'default' | 'outline' | 'solid'
-  className?: string
-}
+import type { SentimentBadgeProps } from '@/types/component-props'
 
 /**
  * Sentiment configuration with emoji, colors, and labels

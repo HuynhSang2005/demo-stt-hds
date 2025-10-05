@@ -8,23 +8,7 @@ import {
   useTranscriptUI 
 } from '@/stores/vietnameseSTT.store'
 import type { VietnameseSentiment } from '@/types/transcript'
-
-/**
- * Props for WarningIndicator component
- */
-interface WarningIndicatorProps {
-  className?: string
-  showDetails?: boolean
-  showHistory?: boolean
-  autoHide?: boolean
-  hideDelay?: number
-  onWarningClick?: (warningType: VietnameseSentiment) => void
-}
-
-/**
- * Warning severity levels for Vietnamese toxic content
- */
-type WarningSeverity = 'low' | 'medium' | 'high' | 'critical'
+import type { WarningIndicatorProps, WarningSeverity } from '@/types/component-props'
 
 /**
  * Get warning severity based on Vietnamese sentiment label
@@ -98,7 +82,7 @@ const WarningStats: React.FC<{
   onClose: () => void
 }> = ({ warnings, onClose }) => {
   return (
-    <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+    <div className="absolute top-full right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
