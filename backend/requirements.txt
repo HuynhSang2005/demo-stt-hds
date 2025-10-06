@@ -37,7 +37,8 @@ soundfile==0.12.1         # Audio file I/O support
 
 # === Utilities ===
 python-dotenv==1.0.0      # Load environment variables từ .env file (if needed)
-click==8.1.7              # CLI utilities (included trong fastapi nhưng explicit)
+click==8.1.7              # CLI utilities (included trong fastapi nhưng ng explicit)
+huggingface-hub==0.19.4   # Download models từ Hugging Face Hub (required by download_models.py)
 
 # === Optional Production Dependencies ===
 # gunicorn==21.2.0         # Production WSGI server (uncomment nếu deploy)
