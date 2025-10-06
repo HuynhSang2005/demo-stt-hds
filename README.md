@@ -1,4 +1,4 @@
-# 🎙## 📋 Mục lục
+## 📋 Mục lục
 
 > 🚀 **Muốn setup nhanh?** Xem [QUICKSTART.md](QUICKSTART.md)
 
