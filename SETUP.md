@@ -13,7 +13,7 @@ Tóm tắt tất cả các cải tiến đã thực hiện để đảm bảo pr
 
 ## 📝 Các file đã tạo/cập nhật
 
-### 📄 Documentation (Mới)
+### 📄 Documentation
 1. **README.md** - Documentation chính, toàn diện
    - Tính năng chính
    - Yêu cầu hệ thống chi tiết (Python, Node, FFmpeg)
@@ -104,17 +104,6 @@ Tóm tắt tất cả các cải tiến đã thực hiện để đảm bảo pr
     - ✅ Thêm audio test files patterns
     - ✅ Better comments
 
-### 🔄 CI/CD (Mới)
-
-13. **.github/workflows/ci.yml** - CI/CD pipeline
-    - ✅ Dependency checking
-    - ✅ Backend tests với pytest
-    - ✅ Backend linting (black, ruff, mypy)
-    - ✅ Frontend build & type check
-    - ✅ Frontend linting (ESLint)
-    - ✅ Integration tests
-    - ✅ Security scan (Trivy)
-    - ✅ Multi-Python version matrix (3.9, 3.10, 3.11)
 
 ## 🐛 Bugs Fixed
 
@@ -144,19 +133,6 @@ Tóm tắt tất cả các cải tiến đã thực hiện để đảm bảo pr
 ❌ Không có troubleshooting guide  
 ❌ Không có contribution guidelines  
 
-### After (Đã cải thiện)
-✅ README.md toàn diện bằng tiếng Việt  
-✅ Có `check-dependencies.py` để validate trước setup  
-✅ Clear system requirements (Python 3.9-3.13, Node 18+, FFmpeg)  
-✅ Automation scripts: `setup.ps1` / `setup.sh`  
-✅ FFmpeg requirement documented rõ ràng  
-✅ Model paths đồng bộ trong config  
-✅ All dependencies complete  
-✅ Troubleshooting section với 7+ common issues  
-✅ CONTRIBUTING.md với coding standards  
-✅ PROJECT_STRUCTURE.md cho architects  
-✅ QUICKSTART.md cho người vội  
-✅ Simplified for beginners (no CI/CD complexity)  
 
 ## 📊 Setup Time Comparison
 
