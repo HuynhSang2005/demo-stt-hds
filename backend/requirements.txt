@@ -6,15 +6,18 @@ fastapi[all]==0.104.1      # FastAPI framework với tất cả optional depende
 uvicorn[standard]==0.24.0   # ASGI server với HTTP/2, WebSocket support
 
 # === Machine Learning ===
-torch==2.1.1                # PyTorch for model inference
-torchvision==0.16.1        # Vision utilities (nếu cần xử lý spectrogram)
-torchaudio==2.1.1          # Audio processing utilities
-transformers==4.35.2       # Hugging Face transformers cho Wav2Vec2 và PhoBERT
+# Updated for Python 3.13 compatibility
+torch>=2.6.0                # PyTorch for model inference (2.6+ required for Python 3.13)
+torchvision>=0.21.0        # Vision utilities (nếu cần xử lý spectrogram)  
+torchaudio>=2.6.0          # Audio processing utilities
+transformers>=4.50.0       # Hugging Face transformers (>=4.50 for tokenizers 0.22 compatibility)
+# tokenizers 0.22+ has pre-built wheels for Python 3.13
 
 # === ONNX Runtime Optimization (Phase 1) ===
-optimum[onnxruntime]==1.16.0  # Hugging Face Optimum for ONNX export & quantization
-onnxruntime==1.16.3           # ONNX Runtime for 2-4x faster inference
-# onnxruntime-gpu==1.16.3     # GPU accelerated (uncomment if using CUDA)
+# Updated for Python 3.13 compatibility
+optimum[onnxruntime]>=1.16.0  # Hugging Face Optimum for ONNX export & quantization
+onnxruntime>=1.20.0           # ONNX Runtime for 2-4x faster inference (1.20+ for Python 3.13)
+# onnxruntime-gpu>=1.20.0     # GPU accelerated (uncomment if using CUDA)
 
 # === Configuration & Logging ===
 pydantic-settings==2.0.3   # PydanticSettings cho env-based configuration
@@ -38,7 +41,7 @@ soundfile==0.12.1         # Audio file I/O support
 # === Utilities ===
 python-dotenv==1.0.0      # Load environment variables từ .env file (if needed)
 click==8.1.7              # CLI utilities (included trong fastapi nhưng ng explicit)
-huggingface-hub==0.19.4   # Download models từ Hugging Face Hub (required by download_models.py)
+huggingface-hub>=0.26.0   # Download models từ Hugging Face Hub (required by download_models.py)
 
 # === Optional Production Dependencies ===
 # gunicorn==21.2.0         # Production WSGI server (uncomment nếu deploy)
