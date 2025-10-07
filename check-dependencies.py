@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Dependency Checker Script
 Kiểm tra tất cả dependencies cần thiết trước khi setup project
@@ -9,40 +10,65 @@ import subprocess
 import platform
 from pathlib import Path
 
-# ANSI color codes
-RED = '\033[0;31m'
-GREEN = '\033[0;32m'
-YELLOW = '\033[1;33m'
-BLUE = '\033[0;34m'
-CYAN = '\033[0;36m'
-NC = '\033[0m'  # No Color
+# Set UTF-8 encoding for Windows console
+if platform.system() == "Windows":
+    import os
+    # Try to set UTF-8 for Windows console
+    try:
+        # For Windows 10+ with UTF-8 support
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Fallback for older Python versions
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
+# ANSI color codes (disable on Windows if not supported)
+def supports_color():
+    """Check if terminal supports ANSI colors"""
+    if platform.system() == "Windows":
+        # Windows 10+ supports ANSI colors in modern terminals
+        import os
+        return os.environ.get('TERM') or hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    return True
+
+if supports_color():
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    BLUE = '\033[0;34m'
+    CYAN = '\033[0;36m'
+    NC = '\033[0m'  # No Color
+else:
+    RED = GREEN = YELLOW = BLUE = CYAN = NC = ''
 
 def print_header():
     """Print script header"""
     print(f"{CYAN}========================================")
-    print("🔍 Dependency Checker")
+    print("Dependency Checker")
     print("    Vietnamese STT + Toxic Detection")
     print(f"========================================{NC}\n")
 
 def print_step(message):
     """Print step message"""
-    print(f"{YELLOW}📋 {message}{NC}")
+    print(f"{YELLOW}[*] {message}{NC}")
 
 def print_success(message):
     """Print success message"""
-    print(f"{GREEN}✅ {message}{NC}")
+    print(f"{GREEN}[OK] {message}{NC}")
 
 def print_error(message):
     """Print error message"""
-    print(f"{RED}❌ {message}{NC}")
+    print(f"{RED}[ERROR] {message}{NC}")
 
 def print_info(message):
     """Print info message"""
-    print(f"{BLUE}ℹ️  {message}{NC}")
+    print(f"{BLUE}[INFO] {message}{NC}")
 
 def print_warning(message):
     """Print warning message"""
-    print(f"{YELLOW}⚠️  {message}{NC}")
+    print(f"{YELLOW}[WARN] {message}{NC}")
 
 def check_command(command):
     """Check if a command exists"""
@@ -233,14 +259,14 @@ def main():
     }
     
     print(f"\n{CYAN}========================================")
-    print("📊 Kết quả kiểm tra")
+    print("Ket qua kiem tra")
     print(f"========================================{NC}\n")
     
     passed = sum(checks.values())
     total = len(checks)
     
     for name, status in checks.items():
-        icon = "✅" if status else "❌"
+        icon = "[OK]" if status else "[X]"
         print(f"{icon} {name}")
     
     print(f"\n{CYAN}Kết quả: {passed}/{total} checks passed{NC}\n")
@@ -250,13 +276,13 @@ def main():
     critical_failed = [name for name in critical if not checks[name]]
     
     if critical_failed:
-        print_error("❌ Một số dependencies BẮT BUỘC còn thiếu!")
-        print_info(f"Thiếu: {', '.join(critical_failed)}")
-        print_info("Vui lòng cài đặt trước khi tiếp tục setup")
+        print_error("Mot so dependencies BAT BUOC con thieu!")
+        print_info(f"Thieu: {', '.join(critical_failed)}")
+        print_info("Vui long cai dat truoc khi tiep tuc setup")
         sys.exit(1)
     else:
-        print_success("🎉 Tất cả dependencies BẮT BUỘC đã sẵn sàng!")
-        print_info("Bạn có thể chạy script setup:")
+        print_success("Tat ca dependencies BAT BUOC da san sang!")
+        print_info("Ban co the chay script setup:")
         
         if platform.system() == "Windows":
             print_info("  .\\setup.ps1")
