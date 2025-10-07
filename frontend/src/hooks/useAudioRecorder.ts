@@ -556,13 +556,17 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       // Setup event handlers
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
-          // Task 7: Check voice activity before processing chunk
-          const hasVoice = checkVoiceActivity()
+          // FIX: DISABLE VAD for session mode to ensure complete WebM container
+          // VAD was skipping chunks, causing incomplete WebM blobs that FFmpeg can't decode
+          // Session mode combines ALL chunks into complete WebM file for backend
+          // TODO: Re-enable VAD only for streaming mode (individual chunks)
           
-          if (!hasVoice) {
-            debugLog(`Skipping silent chunk (size: ${event.data.size} bytes)`)
-            return // Skip silent chunks to save bandwidth
-          }
+          // REMOVED VAD check - keep ALL chunks for complete WebM
+          // const hasVoice = checkVoiceActivity()
+          // if (!hasVoice) {
+          //   debugLog(`Skipping silent chunk (size: ${event.data.size} bytes)`)
+          //   return // Skip silent chunks to save bandwidth
+          // }
 
           const chunk = createAudioChunk(event.data)
           
@@ -687,25 +691,22 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     setSelectedDevice(null)
   }, [stopRecording])
 
-  // Initialize devices on mount
+  // FIX INFINITY LOOP: Auto-detect audio devices ONCE on mount only
+  // Use ref to ensure this only runs once, preventing infinite loops
+  const hasDetectedDevicesRef = useRef(false)
+  
   useEffect(() => {
-    getAvailableDevices()
-  }, [getAvailableDevices])
-
-  // Handle auto-start separately to avoid circular dependencies
-  useEffect(() => {
-    if (autoStart) {
-      startRecording()
+    // Skip if already detected or component unmounting
+    if (hasDetectedDevicesRef.current) {
+      return
     }
-  }, [autoStart, startRecording])
-
-  // FIX #4: Auto-detect audio devices on mount
-  useEffect(() => {
-    let isMounted = true // Prevent state updates after unmount
+    
+    hasDetectedDevicesRef.current = true
+    let isMounted = true
     
     const detectDevices = async () => {
       try {
-        console.log('[useAudioRecorder] Auto-detecting audio devices...')
+        console.log('[useAudioRecorder] Auto-detecting audio devices (ONCE)...')
         
         // Request permission first to get device labels
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -732,7 +733,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
           }
           
           setPermissionGranted(true)
-          onPermissionChange?.(true)
+          // Use optional callback without adding to dependencies
+          if (onPermissionChange) {
+            onPermissionChange(true)
+          }
         }
         
         // Stop the permission stream (we'll create new one when recording)
@@ -749,8 +753,13 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
           
           setError(audioError)
           setPermissionGranted(false)
-          onPermissionChange?.(false)
-          onError?.(audioError)
+          // Use optional callbacks without adding to dependencies
+          if (onPermissionChange) {
+            onPermissionChange(false)
+          }
+          if (onError) {
+            onError(audioError)
+          }
         }
       }
     }
@@ -760,7 +769,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     return () => {
       isMounted = false
     }
-  }, [onError, onPermissionChange]) // Include callback dependencies
+  }, []) // Empty deps - run ONCE on mount only
 
   // Cleanup on unmount
   useEffect(() => {

@@ -12,7 +12,7 @@ import { useSessionWebSocket } from '@/hooks/useSessionWebSocket'
 import { useVietnameseSTTStore } from '@/stores/vietnameseSTT.store'
 import { RecordingStatusIndicator } from './RecordingStatusIndicator'
 import { SimpleWaveform } from './SimpleWaveform'
-import { convertWebMToWAV } from '@/utils/audio-converter'
+// REMOVED: convertWebMToWAV - Backend handles WebM/Opus directly via FFmpeg
 import type { AudioError, AudioChunk } from '@/types/audio'
 import type { TranscriptResult } from '@/types/transcript'
 import type { AudioRecorderProps } from '@/types/component-props'
@@ -116,20 +116,25 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     enableDebug: import.meta.env.DEV
   })
 
-  // Auto-connect ONCE on mount if enabled - no dependencies to prevent re-runs
+  // FIX INFINITY LOOP: Auto-connect ONCE on mount if enabled
+  // Use ref to prevent re-runs when sessionWebSocket object changes
   const hasAutoConnectedRef = useRef(false)
+  const sessionWebSocketRef = useRef(sessionWebSocket)
+  
+  // Update ref when sessionWebSocket changes (but don't trigger effect)
+  sessionWebSocketRef.current = sessionWebSocket
   
   useEffect(() => {
     if (autoConnect && !hasAutoConnectedRef.current) {
       hasAutoConnectedRef.current = true
-      console.log('[AudioRecorder] Auto-connecting WebSocket on mount')
+      console.log('[AudioRecorder] Auto-connecting WebSocket on mount (ONCE)')
       // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
-        sessionWebSocket.connect()
+        sessionWebSocketRef.current.connect()
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [autoConnect, sessionWebSocket]) // Include dependencies for correctness
+  }, [autoConnect]) // Only depend on autoConnect, not sessionWebSocket object
 
   const handleStartRecording = useCallback(async () => {
     try {
@@ -181,13 +186,15 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           const completeWebMBlob = new Blob(allChunkBlobs, { type: 'audio/webm;codecs=opus' })
           console.log(`[AudioRecorder] ✅ Combined blob size: ${completeWebMBlob.size} bytes`)
           
-          // Convert complete WebM to WAV (Backend expects WAV format)
-          console.log('[AudioRecorder] Converting complete WebM to WAV...')
-          const wavArrayBuffer = await convertWebMToWAV(completeWebMBlob, 16000)
-          console.log(`[AudioRecorder] ✅ Converted to WAV: ${wavArrayBuffer.byteLength} bytes`)
+          // FIX: Send WebM directly to backend (NO CONVERSION NEEDED!)
+          // Backend uses torchaudio + FFmpeg to decode WebM/Opus automatically
+          // Converting to WAV in browser is unnecessary and causes errors
+          console.log('[AudioRecorder] Sending WebM directly to backend (FFmpeg will decode)...')
+          const webmArrayBuffer = await completeWebMBlob.arrayBuffer()
+          console.log(`[AudioRecorder] ✅ WebM ArrayBuffer ready: ${webmArrayBuffer.byteLength} bytes`)
           
-          // Send single WAV file
-          sessionWebSocket.sendAudioChunk(wavArrayBuffer, 0)
+          // Send WebM file directly - backend handles decoding
+          sessionWebSocket.sendAudioChunk(webmArrayBuffer, 0)
           
           // End session - transcript will arrive via WebSocket callback
           const transcriptResult = await sessionWebSocket.endSession()

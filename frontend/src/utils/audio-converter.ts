@@ -1,14 +1,34 @@
 /**
  * Audio Format Converter Utilities
- * Converts WebM/Opus audio to WAV format for backend compatibility
+ * 
+ * ⚠️ DEPRECATION WARNING:
+ * This converter is NO LONGER NEEDED and should NOT be used!
+ * 
+ * Backend uses torchaudio + FFmpeg to decode WebM/Opus DIRECTLY.
+ * Converting to WAV in browser is:
+ * - Unnecessary (backend handles it)
+ * - Error-prone (incomplete WebM blobs fail to decode)
+ * - Performance waste (CPU + time)
+ * 
+ * CORRECT APPROACH:
+ * 1. Combine all MediaRecorder chunks into complete WebM blob
+ * 2. Convert blob to ArrayBuffer
+ * 3. Send ArrayBuffer directly to backend via WebSocket
+ * 4. Backend decodes with torchaudio.load() using FFmpeg backend
+ * 
+ * This file is kept for reference only.
  */
 
 /**
+ * @deprecated DO NOT USE - Backend handles WebM/Opus directly
+ * 
  * Convert WebM/Opus Blob to WAV format ArrayBuffer
- * This is necessary because backend's ffmpeg has issues decoding raw WebM chunks
+ * 
+ * ⚠️ This function is NO LONGER USED and causes errors!
+ * Send WebM directly to backend instead.
  * 
  * @param webmBlob - Audio blob from MediaRecorder (WebM/Opus format)
- * @param targetSampleRate - Target sample rate (default: 16000 for Wav2Vec2)
+ * @param targetSampleRate - Target sample rate (default: 16000 for PhoWhisper)
  * @returns ArrayBuffer containing WAV file data
  */
 export async function convertWebMToWAV(
