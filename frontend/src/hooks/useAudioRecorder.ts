@@ -619,8 +619,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
       mediaRecorderRef.current = mediaRecorder
 
-      // Start recording with chunking
-      mediaRecorder.start(chunkDuration)
+      // FIX: Start recording WITHOUT chunking for session mode
+      // Chunking (timeslice) creates fragmented WebM that FFmpeg can't decode when combined
+      // Record entire audio in one chunk for valid WebM container
+      mediaRecorder.start()  // No timeslice = single complete WebM file
 
     } catch (err) {
       const audioError = createAudioError(
