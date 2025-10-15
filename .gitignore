@@ -164,3 +164,10 @@ backend/app/onnx_models/*.onnx
 # Local development overrides
 local_config.py
 dev_settings.py
+
+# AI Model directories (downloaded from Hugging Face)
+PhoWhisper-small/
+phobert-vi-comment-4class/
+
+# Serena AI assistant files
+.serena/
