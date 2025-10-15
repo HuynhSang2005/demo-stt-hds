@@ -22,6 +22,7 @@ from ...core.config import get_settings
 from ...core.logger import WebSocketLogger, AudioProcessingLogger
 from ...services.audio_processor import AudioProcessor, get_audio_processor
 from ...services.session_processor import SessionAudioProcessor
+from ...services.session_processor_fallback import FallbackSessionAudioProcessor, get_fallback_session_processor
 from ...schemas.audio import (
     TranscriptResult, 
     SessionCommand,
@@ -39,12 +40,32 @@ audio_logger = AudioProcessingLogger("session_audio")
 
 # Global session processor instance
 _session_processor: Optional[SessionAudioProcessor] = None
+_fallback_processor: Optional[FallbackSessionAudioProcessor] = None
 
+def _check_pydub_availability() -> bool:
+    """Check if pydub is available"""
+    try:
+        import pydub
+        return True
+    except ImportError:
+        return False
+    except ModuleNotFoundError as e:
+        if "pyaudioop" in str(e):
+            return False
+        return False
 
-async def get_session_processor() -> SessionAudioProcessor:
-    """Get or create session processor instance"""
-    global _session_processor
+async def get_session_processor():
+    """Get or create session processor instance (with fallback)"""
+    global _session_processor, _fallback_processor
     
+    # Check pydub availability
+    if not _check_pydub_availability():
+        if _fallback_processor is None:
+            print("Using fallback session processor (no pydub)")
+            _fallback_processor = get_fallback_session_processor()
+        return _fallback_processor
+    
+    # Use regular processor if pydub is available
     if _session_processor is None:
         # Get AudioProcessor instance which has the models
         audio_processor = get_audio_processor()

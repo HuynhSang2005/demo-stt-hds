@@ -1,28 +1,29 @@
-# FastAPI Backend Dependencies
+# FastAPI Backend Dependencies - Optimized
 # For offline-first Vietnamese speech analysis webapp
+# Updated after codebase cleanup and optimization
 
 # === Web Framework ===
 fastapi[all]==0.104.1      # FastAPI framework với tất cả optional dependencies
 uvicorn[standard]==0.24.0   # ASGI server với HTTP/2, WebSocket support
 
 # === Machine Learning ===
-# Updated for Python 3.13 compatibility
-torch>=2.6.0                # PyTorch for model inference (2.6+ required for Python 3.13)
-torchvision>=0.21.0        # Vision utilities (nếu cần xử lý spectrogram)  
-torchaudio>=2.6.0          # Audio processing utilities
-transformers>=4.50.0       # Hugging Face transformers (>=4.50 for tokenizers 0.22 compatibility)
-# tokenizers 0.22+ has pre-built wheels for Python 3.13
+# Optimized for performance and compatibility
+torch>=2.0.0                # PyTorch for model inference (compatible with Python 3.12+)
+torchvision>=0.15.0        # Vision utilities (nếu cần xử lý spectrogram)  
+torchaudio>=2.0.0          # Audio processing utilities
+transformers>=4.40.0       # Hugging Face transformers
+tokenizers>=0.19.0         # Tokenizers for transformers
 
-# === ONNX Runtime Optimization (Phase 1) ===
-# Updated for Python 3.13 compatibility
+# === ONNX Runtime Optimization ===
+onnx>=1.15.0                  # ONNX format support
+onnxruntime>=1.16.0           # ONNX Runtime for 2-4x faster inference
+# onnxruntime-gpu>=1.16.0     # GPU accelerated (uncomment if using CUDA)
 optimum[onnxruntime]>=1.16.0  # Hugging Face Optimum for ONNX export & quantization
-onnxruntime>=1.20.0           # ONNX Runtime for 2-4x faster inference (1.20+ for Python 3.13)
-# onnxruntime-gpu>=1.20.0     # GPU accelerated (uncomment if using CUDA)
 
 # === Configuration & Logging ===
 pydantic-settings==2.0.3   # PydanticSettings cho env-based configuration
-structlog==23.2.0          # Structured logging cho production
-psutil==5.9.6             # Task 12: System/process metrics collection
+structlog==23.2.0          # Structured logging cho production (optimized)
+psutil==5.9.6             # System/process metrics collection
 
 # === WebSocket & Real-time ===
 websockets==12.0           # WebSocket support (included trong fastapi[all] nhưng explicit)
@@ -34,21 +35,39 @@ pytest-asyncio==0.21.1    # Async testing support
 httpx==0.25.2             # HTTP client cho testing APIs
 
 # === Audio Processing ===
+# Optimized audio processing stack
 librosa==0.10.1           # Audio analysis utilities (nếu cần advanced audio processing)
 soundfile==0.12.1         # Audio file I/O support
 # pydub removed - torchaudio+ffmpeg backend handles all formats directly
 
 # === Utilities ===
-python-dotenv==1.0.0      # Load environment variables từ .env file (if needed)
-click==8.1.7              # CLI utilities (included trong fastapi nhưng ng explicit)
-huggingface-hub>=0.26.0   # Download models từ Hugging Face Hub (required by download_models.py)
+python-dotenv==1.0.0      # Load environment variables từ .env file
+click==8.1.7              # CLI utilities (included trong fastapi nhưng explicit)
+huggingface-hub>=0.19.0   # Download models từ Hugging Face Hub
+
+# === Performance & Caching ===
+# Added for optimization features
+cachetools==5.3.2         # Caching utilities for model caching
+aioredis==2.0.1           # Async Redis client for caching (optional)
+# redis==5.0.1             # Redis server (uncomment if using Redis caching)
+
+# === Circuit Breaker & Resilience ===
+# Added for error handling improvements
+tenacity==8.2.3           # Retry library for circuit breaker patterns
 
 # === Optional Production Dependencies ===
 # gunicorn==21.2.0         # Production WSGI server (uncomment nếu deploy)
-# psutil==5.9.6            # System monitoring (uncomment nếu cần monitor resources)
 # redis==5.0.1             # Caching layer (uncomment nếu cần caching)
 
 # === Development Tools (Optional) ===
 # black==23.11.0           # Code formatter
 # ruff==0.1.6              # Fast Python linter
 # mypy==1.7.1              # Type checking
+
+# === Notes ===
+# This requirements.txt has been optimized for:
+# 1. Maximum compatibility (Python 3.12+)
+# 2. Performance optimization (ONNX Runtime, caching)
+# 3. Reliability (circuit breakers, retry mechanisms)
+# 4. Production readiness (structured logging, monitoring)
+# 5. Clean architecture (proper separation of concerns)

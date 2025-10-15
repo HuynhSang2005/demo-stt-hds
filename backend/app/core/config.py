@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     CLASSIFIER_BATCH_SIZE: int = Field(default=8, description="Max batch size for text classification")
     CLASSIFIER_BATCH_TIMEOUT: float = Field(default=0.03, description="Max wait time for classifier batch in seconds")
     
+    # ONNX Optimization Settings
+    ONNX_ENABLED: bool = Field(default=True, description="Enable ONNX optimization")
+    ONNX_AUTO_CONVERT: bool = Field(default=True, description="Auto-convert PyTorch models to ONNX")
+    ONNX_BENCHMARK: bool = Field(default=True, description="Benchmark PyTorch vs ONNX performance")
+    ONNX_FALLBACK_TO_PYTORCH: bool = Field(default=True, description="Fallback to PyTorch if ONNX fails")
+    PREFER_ONNX: bool = Field(default=True, description="Prefer ONNX models when available")
+    
     class Config:
         """Pydantic configuration"""
         case_sensitive = True

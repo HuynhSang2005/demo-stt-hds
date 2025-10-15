@@ -30,6 +30,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const endStoreSession = useVietnameseSTTStore((state) => state.endSession)
   const [sessionMode, setSessionMode] = useState(true)
   const [accumulatedChunks, setAccumulatedChunks] = useState<AudioChunk[]>([])
+  const accumulatedChunksRef = useRef<AudioChunk[]>([])
   const [currentSession, setCurrentSession] = useState<{ id: string } | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [rmsHistory, setRmsHistory] = useState<number[]>([])
@@ -71,17 +72,28 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     selectedDevice,
     selectDevice,
   } = useAudioRecorder({
-    onAudioChunk: async (chunk: AudioChunk) => {
+      onAudioChunk: async (chunk: AudioChunk) => {
+        console.log('[AudioRecorder] Received audio chunk:', {
+          sessionMode,
+          chunkSize: chunk.data instanceof Blob ? chunk.data.size : chunk.data.byteLength,
+          chunkType: chunk.data instanceof Blob ? chunk.data.type : 'ArrayBuffer'
+        })
       if (sessionMode) {
-        setAccumulatedChunks((prev) => [...prev, chunk])
+        setAccumulatedChunks((prev) => {
+          const newChunks = [...prev, chunk]
+          accumulatedChunksRef.current = newChunks  // Sync ref immediately
+          console.log('[AudioRecorder] Accumulated chunks count:', newChunks.length)
+          return newChunks
+        })
       }
     },
     onRecordingStart: () => {
       console.log('[AudioRecorder] Recording started')
       setRmsHistory([])
+      setIsVoiceDetected(false) // Reset voice detection state
     },
     onRecordingStop: () => {
-      console.log('[AudioRecorder] Recording stopped')
+      console.log('[AudioRecorder] Recording stopped - accumulatedChunks (ref):', accumulatedChunksRef.current.length)
       setRmsHistory([])
       setIsVoiceDetected(false)
     },
@@ -90,8 +102,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       onError?.(new Error(err.message))
     },
     onVolumeChange: (volume: number) => {
-      // Debug logging (10% sample rate to avoid spam)
-      if (import.meta.env.DEV && Math.random() < 0.1) {
+      // Debug logging (1% sample rate to reduce spam)
+      if (import.meta.env.DEV && Math.random() < 0.01) {
         console.log(`[AudioRecorder] 🔊 onVolumeChange: ${(volume * 100).toFixed(1)}%`)
       }
       
@@ -99,9 +111,19 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         const newHistory = [...prev, volume]
         return newHistory.slice(-20)
       })
-      setIsVoiceDetected(volume > 0.05)
+      
+      // FIX: Improved voice detection with adaptive threshold
+      // Use higher sensitivity for better detection
+      const voiceThreshold = 0.03 // Reduced from 0.05 for better sensitivity
+      const hasVoice = volume > voiceThreshold
+      setIsVoiceDetected(hasVoice)
+      
+      // Debug voice detection (reduced to 1% to prevent spam)
+      if (import.meta.env.DEV && Math.random() < 0.01) {
+        console.log(`[AudioRecorder] 🎤 Voice detection: volume=${(volume * 100).toFixed(1)}%, threshold=${(voiceThreshold * 100).toFixed(1)}%, hasVoice=${hasVoice}`)
+      }
     },
-    enableVolumeDetection: showVolumeIndicator,
+    enableVolumeDetection: true, // Always enable for real-time volume detection
     chunkDuration: 1000,
   })
 
@@ -169,22 +191,30 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       
       // CRITICAL: Wait for MediaRecorder to fully stop and flush final data
       // Without this delay, combined WebM may be incomplete (missing footer/cues)
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Also wait for onRecordingStop callback to complete
+      await new Promise(resolve => setTimeout(resolve, 200))
       
-      if (sessionMode && accumulatedChunks.length > 0) {
-        console.log('[AudioRecorder] Processing session with', accumulatedChunks.length, 'chunks')
+      console.log('[AudioRecorder] After stop delay - accumulatedChunks (ref):', accumulatedChunksRef.current.length)
+      
+      if (sessionMode && accumulatedChunksRef.current.length > 0) {
+        console.log('[AudioRecorder] Processing session with', accumulatedChunksRef.current.length, 'chunks')
+        
+        // FIX: Validate single chunk to avoid WebM corruption
+        if (accumulatedChunksRef.current.length > 1) {
+          console.warn('[AudioRecorder] Multiple chunks detected - this may cause WebM corruption. Using first chunk only.')
+        }
         
         try {
           setIsProcessing(true)
           
-          // Combine all MediaRecorder chunks into a single complete WebM blob
-          // MediaRecorder produces streaming fragments where only the first chunk has the complete WebM header
-          console.log('[AudioRecorder] Combining all chunks into complete WebM blob...')
-          const allChunkBlobs = accumulatedChunks.map(chunk =>
-            chunk.data instanceof Blob ? chunk.data : new Blob([chunk.data], { type: 'audio/webm' })
-          )
-          const completeWebMBlob = new Blob(allChunkBlobs, { type: 'audio/webm;codecs=opus' })
-          console.log(`[AudioRecorder] ✅ Combined blob size: ${completeWebMBlob.size} bytes`)
+          // FIX: Use single chunk to avoid WebM corruption from multiple chunks combination
+          // MediaRecorder with no timeslice produces single complete WebM file
+          console.log('[AudioRecorder] Using single chunk (no combination needed)...')
+          const singleChunk = accumulatedChunksRef.current[0]
+          const completeWebMBlob = singleChunk.data instanceof Blob 
+            ? singleChunk.data 
+            : new Blob([singleChunk.data], { type: 'audio/webm;codecs=opus' })
+          console.log(`[AudioRecorder] ✅ Single chunk blob size: ${completeWebMBlob.size} bytes`)
           
           // FIX: Send WebM directly to backend (NO CONVERSION NEEDED!)
           // Backend uses torchaudio + FFmpeg to decode WebM/Opus automatically
@@ -233,6 +263,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         }
         
         setAccumulatedChunks([])
+        accumulatedChunksRef.current = []
       } else if (currentSession) {
         // No chunks to process, just clear session
         endStoreSession(currentSession.id)
@@ -247,7 +278,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   }, [
     stopRecording,
     sessionMode,
-    accumulatedChunks,
     sessionWebSocket,
     currentSession,
     endStoreSession,
@@ -294,6 +324,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       {!permissionGranted && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
           <p className="text-sm text-blue-800"> Cần quyền truy cập microphone để thu âm</p>
+          <p className="text-xs text-blue-600">Debug: permissionGranted = {String(permissionGranted)}</p>
         </div>
       )}
 
@@ -338,6 +369,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             onClick={handleStartRecording}
             disabled={!permissionGranted || !sessionWebSocket.isConnected || isProcessing}
             className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
+            title={`Debug: permission=${permissionGranted}, ws=${sessionWebSocket.isConnected}, processing=${isProcessing}`}
           >
              Bắt đầu ghi
           </button>

@@ -24,6 +24,8 @@ import asyncio
 from ...core.config import Settings, get_settings
 from ...core.logger import WebSocketLogger, AudioProcessingLogger
 from ...services.audio_processor import AudioProcessor, get_audio_processor, AudioProcessorError
+from ...services.async_audio_processor import OptimizedAsyncAudioProcessor
+from ...services.processor_factory import get_audio_processor as get_optimized_processor
 from ...schemas.audio import (
     TranscriptResult, 
     ErrorResponse, 
@@ -36,6 +38,16 @@ from ...schemas.audio import (
 
 # Initialize router
 router = APIRouter()
+
+# Global optimized processor instance
+_optimized_processor: Optional[OptimizedAsyncAudioProcessor] = None
+
+async def get_optimized_audio_processor() -> OptimizedAsyncAudioProcessor:
+    """Get optimized audio processor instance"""
+    global _optimized_processor
+    if _optimized_processor is None:
+        _optimized_processor = await get_optimized_processor()
+    return _optimized_processor
 
 # Initialize loggers
 websocket_logger = WebSocketLogger("websocket_endpoints")
@@ -208,6 +220,7 @@ async def websocket_endpoint(
                                 
                             elif command == "end_session":
                                 print(f"🔚 Ending session: {session_id}")
+                                print(f"📊 Available session buffers: {list(connection_manager.session_buffers.keys())}")
                                 
                                 # Get buffered audio chunks
                                 if session_id in connection_manager.session_buffers:
@@ -224,10 +237,11 @@ async def websocket_endpoint(
                                             result = await audio_processor.process_audio_bytes_async(combined_audio)
                                             
                                             if isinstance(result, TranscriptResult):
-                                                # Send transcript result
+                                                # Send transcript result using consistent format
                                                 await websocket.send_json({
-                                                    "type": "transcription_result",
-                                                    "result": result.model_dump(mode='json')
+                                                    "message_type": "transcription_result",
+                                                    "data": result.model_dump(mode='json'),
+                                                    "timestamp": time.time()
                                                 })
                                                 print(f"✅ Sent transcript: '{result.text[:50]}...'")
                                             else:
@@ -319,34 +333,44 @@ async def websocket_endpoint(
                     # Buffer audio for session processing
                     connection_manager.session_buffers[current_session].append(audio_data)
                     print(f"📦 Buffered {len(audio_data)} bytes for session {current_session} (total chunks: {len(connection_manager.session_buffers[current_session])})")
-                    
-                    # Update connection stats
-                    if client_id in connection_manager.connection_info:
-                        connection_manager.connection_info[client_id]["processed_chunks"] += 1
-                    
-                    # Don't process now - wait for end_session
+                    # Continue to process buffered audio in session mode
                     continue
+                else:
+                    print(f"📊 No active session - processing audio in real-time mode")
+                    print(f"📊 Current session: {current_session}")
+                    print(f"📊 Available buffers: {list(connection_manager.session_buffers.keys())}")
+                    
+                    # Process audio immediately in real-time mode
                 
                 # Process audio chunk (OPTIMIZED: Use async version)
                 processing_start = time.time()
                 
                 try:
-                    print(f"🔄 Processing {len(audio_data)} bytes audio...")
+                    # Structured logging for audio processing
+                    audio_logger.log_audio_chunk_received(len(audio_data))
+                    audio_logger.logger.info("processing_started", event_type="pipeline_start")
+                    
                     # Use ASYNC processing for better performance
                     try:
                         result = await audio_processor.process_audio_bytes_async(audio_data)
+                        audio_logger.logger.info("processing_completed", event_type="pipeline_complete")
                     except Exception as async_error:
                         # Fallback to sync version if async fails
-                        websocket_logger.log_error(
-                            error=f"Async processing failed, using sync: {async_error}",
-                            error_type="async_fallback"
+                        audio_logger.logger.error(
+                            "processing_error",
+                            error_message=f"Async processing failed, using sync: {async_error}",
+                            error_type="async_fallback",
+                            event_type="pipeline_error"
                         )
                         result = audio_processor.process_audio_chunk_safe(audio_data)
-                    print(f"✅ Processing result: {type(result)}")
+                        audio_logger.logger.info("processing_completed", event_type="pipeline_complete")
                 except Exception as process_error:
-                    print(f"❌ Processing error: {process_error}")
-                    import traceback
-                    traceback.print_exc()
+                    audio_logger.logger.error(
+                        "processing_error",
+                        error_message=f"Audio processing failed: {str(process_error)}",
+                        error_type="processing_failed",
+                        event_type="pipeline_error"
+                    )
                     error_response = create_error_response(
                         error_type="processing_failed",
                         message=f"Audio processing failed: {str(process_error)}"
@@ -575,4 +599,176 @@ async def health_check():
                 "error": str(e),
                 "timestamp": time.time()
             }
+        )
+
+@router.websocket("/ws/optimized")
+async def optimized_websocket_endpoint(
+    websocket: WebSocket,
+    optimized_processor: OptimizedAsyncAudioProcessor = Depends(get_optimized_audio_processor)
+):
+    """
+    Optimized WebSocket endpoint with parallel processing
+    Features:
+    - Parallel ASR + Classification
+    - Model caching
+    - Performance metrics
+    - Enhanced error handling
+    """
+    client_id = f"optimized_{int(time.time() * 1000)}_{id(websocket)}"
+    
+    try:
+        await websocket.accept()
+        audio_logger.logger.info(
+            "optimized_websocket_connected",
+            event_type="connection_established",
+            client_id=client_id,
+            endpoint="optimized"
+        )
+        
+        # Add to connection manager
+        connection_manager.add_connection(websocket, client_id)
+        
+        # Send connection confirmation
+        await websocket.send_json({
+            "type": "connection_status",
+            "status": "connected",
+            "client_id": client_id,
+            "endpoint": "optimized",
+            "features": [
+                "parallel_processing",
+                "model_caching",
+                "performance_metrics",
+                "enhanced_error_handling"
+            ]
+        })
+        
+        # Process messages
+        while True:
+            try:
+                # Receive message (text or binary)
+                message = await websocket.receive()
+                
+                if message["type"] == "websocket.receive" and "bytes" in message:
+                    # Binary message (audio data)
+                    audio_data = message["bytes"]
+                    
+                    processing_start = time.time()
+                    
+                    try:
+                        # Use optimized parallel processing
+                        result, metrics = await optimized_processor.process_audio_parallel(
+                            audio_data,
+                            enable_parallel=True
+                        )
+                        
+                        processing_time = time.time() - processing_start
+                        
+                        # Update connection stats
+                        if client_id in connection_manager.connection_info:
+                            connection_manager.connection_info[client_id]["processed_chunks"] += 1
+                            connection_manager.connection_info[client_id]["total_processing_time"] += processing_time
+                        
+                        # Send result with performance metrics
+                        response = {
+                            "type": "transcript_result",
+                            "data": {
+                                "text": result.text,
+                                "confidence": result.confidence,
+                                "language": result.language,
+                                "sentiment": {
+                                    "label": result.sentiment_label,
+                                    "score": result.sentiment_score,
+                                    "is_toxic": result.is_toxic,
+                                    "toxic_keywords": result.toxic_keywords
+                                },
+                                "processing_metrics": {
+                                    "total_time_ms": metrics.total_time * 1000,
+                                    "asr_time_ms": metrics.asr_time * 1000,
+                                    "classification_time_ms": metrics.classification_time * 1000,
+                                    "audio_duration": metrics.audio_duration,
+                                    "throughput_ratio": metrics.throughput_ratio
+                                }
+                            },
+                            "timestamp": time.time()
+                        }
+                        
+                        await websocket.send_json(response)
+                        
+                        audio_logger.logger.info(
+                            "optimized_processing_completed",
+                            event_type="processing_complete",
+                            client_id=client_id,
+                            processing_time_ms=processing_time * 1000,
+                            throughput_ratio=metrics.throughput_ratio
+                        )
+                        
+                    except Exception as process_error:
+                        audio_logger.logger.error(
+                            "optimized_processing_failed",
+                            event_type="processing_error",
+                            client_id=client_id,
+                            error=str(process_error)
+                        )
+                        
+                        error_response = create_error_response(
+                            error_type="processing_failed",
+                            message=f"Optimized audio processing failed: {str(process_error)}"
+                        )
+                        await connection_manager.send_error(websocket, error_response)
+                        continue
+                
+                elif message["type"] == "websocket.receive" and "text" in message:
+                    # Text message (commands)
+                    try:
+                        data = json.loads(message["text"])
+                        
+                        if data.get("type") == "get_performance_stats":
+                            # Return performance statistics
+                            stats = optimized_processor.get_performance_stats()
+                            await websocket.send_json({
+                                "type": "performance_stats",
+                                "data": stats,
+                                "timestamp": time.time()
+                            })
+                        
+                        elif data.get("type") == "ping":
+                            # Heartbeat response
+                            await websocket.send_json({
+                                "type": "pong",
+                                "timestamp": time.time()
+                            })
+                        
+                    except json.JSONDecodeError:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Invalid JSON format",
+                            "timestamp": time.time()
+                        })
+                
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                audio_logger.logger.error(
+                    "optimized_websocket_error",
+                    event_type="websocket_error",
+                    client_id=client_id,
+                    error=str(e)
+                )
+                break
+    
+    except Exception as e:
+        audio_logger.logger.error(
+            "optimized_websocket_fatal_error",
+            event_type="fatal_error",
+            client_id=client_id,
+            error=str(e)
+        )
+    
+    finally:
+        # Cleanup
+        connection_manager.remove_connection(websocket, client_id)
+        audio_logger.logger.info(
+            "optimized_websocket_disconnected",
+            event_type="connection_closed",
+            client_id=client_id
         )

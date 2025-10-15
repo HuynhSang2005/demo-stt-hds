@@ -49,14 +49,14 @@ export const AudioChunkMessageSchema = BaseWebSocketMessageSchema.extend({
   type: z.literal('audio_chunk'),
   
   data: z.object({
-    audioData: z.instanceof(ArrayBuffer)
-      .describe('Raw audio data as ArrayBuffer'),
-    
-    chunkIndex: z.number()
+    chunk_id: z.number()
       .min(0)
       .describe('Sequential index of this audio chunk'),
     
-    sampleRate: z.number()
+    audio_data: z.string()
+      .describe('Base64 encoded audio data for backend compatibility'),
+    
+    sample_rate: z.number()
       .positive()
       .default(16000)
       .describe('Audio sample rate in Hz'),
@@ -66,10 +66,19 @@ export const AudioChunkMessageSchema = BaseWebSocketMessageSchema.extend({
       .default(1)
       .describe('Number of audio channels'),
     
+    duration: z.number()
+      .positive()
+      .optional()
+      .describe('Audio duration in seconds'),
+    
+    is_final: z.boolean()
+      .default(false)
+      .describe('Whether this is the final chunk of a recording session'),
+    
     format: z.string()
       .default('webm')
       .describe('Audio format/codec')
-  }).describe('Audio chunk data payload')
+  }).describe('Audio chunk data payload compatible with backend')
 }).describe('WebSocket message containing audio data for Vietnamese STT')
 
 /**

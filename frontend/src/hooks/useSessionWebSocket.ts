@@ -74,8 +74,13 @@ export const useSessionWebSocket = (
       log('Received message:', data)
 
       // Handle different message types
+      // FIX: Support both message formats from backend
       if (data.type === 'transcription_result' && data.result) {
+        // Format 1: {type: 'transcription_result', result: {...}}
         handlersRef.current.onTranscriptResult?.(data.result)
+      } else if (data.message_type === 'transcription_result' && data.data) {
+        // Format 2: {message_type: 'transcription_result', data: {...}}
+        handlersRef.current.onTranscriptResult?.(data.data)
       } else if (data.type === 'connection_status') {
         handlersRef.current.onConnectionStatusChange?.(data.status, data.message)
       } else if (data.type === 'processing_status') {
@@ -151,18 +156,19 @@ export const useSessionWebSocket = (
     log('Sent session command:', message)
   }, [isConnected, log])
 
-  // Send audio chunk
-  const sendAudioChunk = useCallback((audioData: ArrayBuffer, chunkIndex: number = 0) => {
+  // Send audio chunk with proper format for backend compatibility
+  const sendAudioChunk = useCallback((audioData: ArrayBuffer, chunkIndex: number = 0, isFinal: boolean = false) => {
     if (!connectionIdRef.current || !isConnected) {
       throw new Error('WebSocket not connected')
     }
 
-    const success = webSocketManager.send(connectionIdRef.current, audioData)
+    // Backend expects binary audio data directly, not JSON
+    const success = webSocketManager.sendBinary(connectionIdRef.current, audioData)
     if (!success) {
       throw new Error('Failed to send audio chunk')
     }
     
-    log('Sent audio chunk:', audioData.byteLength, 'bytes, index:', chunkIndex)
+    log('Sent audio chunk:', audioData.byteLength, 'bytes, index:', chunkIndex, 'final:', isFinal)
   }, [isConnected, log])
 
   // Start session with connection check

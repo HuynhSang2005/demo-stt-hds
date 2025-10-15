@@ -1,7 +1,0 @@
-{
-  "host": "127.0.0.1",
-  "port": 8000,
-  "api_v1_str": "/v1",
-  "websocket_endpoint": "/v1/ws",
-  "cors_origins": ["http://localhost:5173", "http://127.0.0.1:5173"]
-}

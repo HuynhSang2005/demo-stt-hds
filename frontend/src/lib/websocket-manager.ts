@@ -166,6 +166,37 @@ class WebSocketManager {
     }
   }
 
+  sendJSON(connectionId: string, data: any): boolean {
+    const connection = this.connections.get(connectionId)
+    if (!connection || !connection.ws || connection.ws.readyState !== WebSocket.OPEN) {
+      return false
+    }
+
+    try {
+      const jsonString = JSON.stringify(data)
+      connection.ws.send(jsonString)
+      return true
+    } catch (error) {
+      console.error(`[WebSocketManager] SendJSON failed ${connectionId}:`, error)
+      return false
+    }
+  }
+
+  sendBinary(connectionId: string, data: ArrayBuffer): boolean {
+    const connection = this.connections.get(connectionId)
+    if (!connection || !connection.ws || connection.ws.readyState !== WebSocket.OPEN) {
+      return false
+    }
+
+    try {
+      connection.ws.send(data)
+      return true
+    } catch (error) {
+      console.error(`[WebSocketManager] Send binary failed ${connectionId}:`, error)
+      return false
+    }
+  }
+
   addStatusListener(connectionId: string, listener: (status: ConnectionStatus, reason?: string) => void): void {
     const connection = this.connections.get(connectionId)
     if (connection) {

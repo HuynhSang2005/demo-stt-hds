@@ -340,7 +340,7 @@ def retry_with_backoff(
                     # Log retry attempt
                     print(f"Retry attempt {attempt + 1}/{max_attempts} after {delay:.1f}s: {e}")
                     
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)
             
             # All retries exhausted
             if last_exception:

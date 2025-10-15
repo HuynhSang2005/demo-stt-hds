@@ -19,6 +19,7 @@ import { SentimentBadge } from './SentimentBadge'
 import { ConfidenceBreakdown } from './ConfidenceBreakdown'
 import { ToxicWarningAlert } from './ToxicWarningAlert'
 import { BadKeywordsList } from './BadKeywordsList'
+import { VietnameseHighlightedText } from './VietnameseHighlightedText'
 
 /**
  * Use Vietnamese formatting utilities
@@ -106,7 +107,14 @@ const TranscriptEntryComponent = React.memo<{
           // Highlight warnings with subtle background
           transcript.warning && "bg-red-50 px-3 py-2 rounded-lg border-l-4 border-red-400"
         )}>
-          {transcript.text || (
+          {transcript.text ? (
+            <VietnameseHighlightedText
+              text={transcript.text}
+              keywords={transcript.bad_keywords || []}
+              severity={transcript.label === 'toxic' ? 'high' : transcript.label === 'negative' ? 'medium' : 'low'}
+              className="inline"
+            />
+          ) : (
             <span className="italic text-gray-400 text-base">
               {VIETNAMESE_UI_TEXT.transcripts.processing}
             </span>

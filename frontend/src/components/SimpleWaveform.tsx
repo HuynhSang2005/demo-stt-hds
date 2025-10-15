@@ -16,8 +16,8 @@ export const SimpleWaveform: React.FC<SimpleWaveformProps> = ({
   barCount = 20,
   className,
 }) => {
-  // Voice detection threshold
-  const voiceActive = isVoiceDetected || rmsValues[rmsValues.length - 1] > 0.05
+  // FIX: Improved voice detection threshold to match AudioRecorder
+  const voiceActive = isVoiceDetected || (rmsValues.length > 0 && rmsValues[rmsValues.length - 1] > 0.03)
 
   // Ensure we have the right number of values (pad with zeros if needed)
   const normalizedValues = useMemo(() => {
@@ -27,8 +27,8 @@ export const SimpleWaveform: React.FC<SimpleWaveformProps> = ({
     }
     const result = values.slice(-barCount) // Take last N values
     
-    // Debug logging in development
-    if (import.meta.env.DEV && isRecording && values.length > 0) {
+    // Debug logging in development (reduced frequency)
+    if (import.meta.env.DEV && isRecording && values.length > 0 && Math.random() < 0.02) {
       console.log(`[SimpleWaveform] RMS values: ${values.length} items, last: ${values[values.length - 1]?.toFixed(3)}`)
     }
     
@@ -70,11 +70,11 @@ export const SimpleWaveform: React.FC<SimpleWaveformProps> = ({
             ? Math.max(10, Math.min(100, value * 150)) // Amplify by 1.5x for better visibility
             : 10 // Flat baseline when not recording
 
-          // Determine bar color based on voice detection and value
+          // FIX: Improved bar color logic with better thresholds
           let barColor = 'bg-gray-300' // Default: gray
-          if (isRecording && value > 0.05) {
+          if (isRecording && value > 0.03) { // Match voice detection threshold
             if (voiceActive) {
-              barColor = value > 0.15 ? 'bg-green-500' : 'bg-green-400'
+              barColor = value > 0.1 ? 'bg-green-500' : 'bg-green-400'
             } else {
               barColor = 'bg-yellow-400'
             }

@@ -183,10 +183,60 @@ class AudioProcessor:
             AudioDecodingError: Nếu không thể decode audio
         """
         try:
-            # Single-step decode with torchaudio+ffmpeg backend
-            # Handles WebM/Opus, WAV, MP3, FLAC, etc. in one call
+            # Try direct torchaudio load first (for WAV, MP3, etc.)
             audio_buffer = io.BytesIO(audio_data)
-            waveform, sample_rate = torchaudio.load(audio_buffer)
+            try:
+                waveform, sample_rate = torchaudio.load(audio_buffer)
+            except Exception as direct_error:
+                # If direct load fails, try FFmpeg conversion for WebM/Opus
+                self.audio_logger.logger.info(
+                    "audio_format_fallback",
+                    error=f"Direct load failed: {direct_error}, trying FFmpeg conversion",
+                    event_type="decode_fallback"
+                )
+                
+                # Use FFmpeg to convert WebM to WAV
+                import subprocess
+                import tempfile
+                import os
+                
+                # Create temp files with explicit close
+                input_file = tempfile.NamedTemporaryFile(suffix='.webm', delete=False)
+                input_file.write(audio_data)
+                input_file.flush()
+                input_file.close()  # Explicitly close to release file handle
+                
+                output_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+                output_file.close()  # Close immediately after creation
+                
+                try:
+                    # Convert WebM to WAV using FFmpeg
+                    cmd = [
+                        'ffmpeg', '-i', input_file.name,
+                        '-acodec', 'pcm_s16le',
+                        '-ar', '16000',  # Resample to 16kHz for ASR
+                        '-ac', '1',      # Mono
+                        '-y',            # Overwrite output
+                        output_file.name
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode != 0:
+                        raise AudioDecodingError(f"FFmpeg conversion failed: {result.stderr}")
+                    
+                    # Load converted WAV file
+                    waveform, sample_rate = torchaudio.load(output_file.name)
+                    
+                finally:
+                    # Cleanup temp files
+                    try:
+                        os.unlink(input_file.name)
+                    except OSError:
+                        pass
+                    try:
+                        os.unlink(output_file.name)
+                    except OSError:
+                        pass
             
             # Validate decoded audio
             if waveform.numel() == 0:

@@ -193,6 +193,10 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
       })
       
       console.log('[STT Store] Ended session:', sessionId)
+      
+      // FIX: Don't reset session state immediately - let transcript callback handle it
+      // Session will be reset when transcript is received or after timeout
+      // This prevents "No active session for transcript" error
     },
     
     pauseSession: (sessionId: string) => {
@@ -235,9 +239,10 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
     addTranscript: (result: TranscriptResult) => {
       const state = get()
       
-      if (!state.currentSession) {
-        console.warn('[STT Store] No active session for transcript')
-        return
+      // Allow transcript even without active session (for real-time mode)
+      // Only warn in development mode
+      if (!state.currentSession && import.meta.env.DEV) {
+        console.warn('[STT Store] No active session for transcript - processing anyway')
       }
       
       // Debug: Log the exact response from backend
@@ -257,7 +262,7 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
       
       const entry: TranscriptEntry = {
         id: transcriptId,
-        sessionId: state.currentSession.id,
+        sessionId: state.currentSession?.id || 'realtime',
         timestamp: Date.now(),
         text: result.text,
         label: result.sentiment_label, // FIXED: correct field name
@@ -307,6 +312,16 @@ export const useVietnameseSTTStore = create<VietnameseSTTState>()(
       if (!state.selectedTranscriptId) {
         get().selectTranscript(transcriptId)
       }
+      
+      // FIX: Reset session state after transcript is successfully added
+      // This ensures session is available for transcript callback but gets reset after processing
+      setTimeout(() => {
+        set((_state) => ({
+          currentSession: null,
+          isRecording: false,
+        }))
+        console.log('[STT Store] Session state reset after transcript added')
+      }, 100) // Short delay to ensure transcript processing is complete
     },
     
     updateTranscript: (id: string, updates: Partial<TranscriptEntry>) => {

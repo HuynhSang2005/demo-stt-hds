@@ -79,6 +79,7 @@ export interface UseAudioRecorderReturn {
   availableDevices: MediaDeviceInfo[]
   selectedDevice: MediaDeviceInfo | null
   selectDevice: (deviceId: string) => void
+  getAvailableDevices: () => Promise<MediaDeviceInfo[]>
   
   // Error handling
   error: AudioError | null

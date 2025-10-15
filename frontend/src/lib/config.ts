@@ -28,10 +28,11 @@ interface AppConfig {
 function loadConfig(): AppConfig {
   const host = import.meta.env.VITE_API_HOST || '127.0.0.1'
   const port = parseInt(import.meta.env.VITE_API_PORT || '8000', 10)
-  const wsPath = import.meta.env.VITE_WS_PATH || '/v1/ws'
+  const wsPath = import.meta.env.VITE_WS_PATH || '/v1/ws'  // Use standard WebSocket endpoint
   
   // Use explicit WS URL if provided, otherwise construct from parts
   const wsUrl = import.meta.env.VITE_WS_URL || `ws://${host}:${port}${wsPath}`
+  
   const httpUrl = `http://${host}:${port}`
   
   return {

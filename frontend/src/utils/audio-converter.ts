@@ -1,293 +1,113 @@
 /**
- * Audio Format Converter Utilities
+ * Audio Conversion Utilities for Vietnamese STT
  * 
- * ⚠️ DEPRECATION WARNING:
- * This converter is NO LONGER NEEDED and should NOT be used!
- * 
- * Backend uses torchaudio + FFmpeg to decode WebM/Opus DIRECTLY.
- * Converting to WAV in browser is:
- * - Unnecessary (backend handles it)
- * - Error-prone (incomplete WebM blobs fail to decode)
- * - Performance waste (CPU + time)
- * 
- * CORRECT APPROACH:
- * 1. Combine all MediaRecorder chunks into complete WebM blob
- * 2. Convert blob to ArrayBuffer
- * 3. Send ArrayBuffer directly to backend via WebSocket
- * 4. Backend decodes with torchaudio.load() using FFmpeg backend
- * 
- * This file is kept for reference only.
+ * Handles conversion between different audio formats for frontend-backend compatibility
  */
 
 /**
- * @deprecated DO NOT USE - Backend handles WebM/Opus directly
- * 
- * Convert WebM/Opus Blob to WAV format ArrayBuffer
- * 
- * ⚠️ This function is NO LONGER USED and causes errors!
- * Send WebM directly to backend instead.
- * 
- * @param webmBlob - Audio blob from MediaRecorder (WebM/Opus format)
- * @param targetSampleRate - Target sample rate (default: 16000 for PhoWhisper)
- * @returns ArrayBuffer containing WAV file data
+ * Convert ArrayBuffer to Base64 string for WebSocket transmission
+ * @param arrayBuffer - Raw audio data as ArrayBuffer
+ * @returns Base64 encoded string
  */
-export async function convertWebMToWAV(
-  webmBlob: Blob,
-  targetSampleRate: number = 16000
-): Promise<ArrayBuffer> {
-  let audioContext: AudioContext | null = null
+export function arrayBufferToBase64(arrayBuffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(arrayBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+/**
+ * Convert Base64 string to ArrayBuffer for audio processing
+ * @param base64 - Base64 encoded audio data
+ * @returns ArrayBuffer containing audio data
+ */
+export function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
+/**
+ * Calculate audio duration from ArrayBuffer
+ * @param arrayBuffer - Audio data
+ * @param sampleRate - Sample rate in Hz
+ * @param channels - Number of channels
+ * @returns Duration in seconds
+ */
+export function calculateAudioDuration(
+  arrayBuffer: ArrayBuffer,
+  sampleRate: number = 16000,
+  channels: number = 1
+): number {
+  // For WebM format, this is an approximation
+  // Real duration calculation would require proper audio decoding
+  const bytesPerSample = 2 // 16-bit samples
+  const totalSamples = arrayBuffer.byteLength / (bytesPerSample * channels)
+  return totalSamples / sampleRate
+}
+
+/**
+ * Validate audio data for Vietnamese STT processing
+ * @param arrayBuffer - Audio data to validate
+ * @param minDuration - Minimum duration in seconds (default: 0.1)
+ * @param maxDuration - Maximum duration in seconds (default: 30)
+ * @returns Validation result with success flag and error message
+ */
+export function validateAudioData(
+  arrayBuffer: ArrayBuffer,
+  minDuration: number = 0.1,
+  maxDuration: number = 30
+): { success: boolean; error?: string } {
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    return { success: false, error: 'Audio data is empty' }
+  }
+
+  // Check minimum size (roughly 0.1 second at 16kHz mono)
+  const minSize = minDuration * 16000 * 2 // 16kHz * 16-bit * 0.1s
+  if (arrayBuffer.byteLength < minSize) {
+    return { success: false, error: 'Audio too short for processing' }
+  }
+
+  // Check maximum size (roughly 30 seconds at 16kHz mono)
+  const maxSize = maxDuration * 16000 * 2 // 16kHz * 16-bit * 30s
+  if (arrayBuffer.byteLength > maxSize) {
+    return { success: false, error: 'Audio too long for processing' }
+  }
+
+  return { success: true }
+}
+
+/**
+ * Create audio chunk metadata for WebSocket transmission
+ * @param arrayBuffer - Audio data
+ * @param chunkIndex - Sequential chunk index
+ * @param sampleRate - Sample rate in Hz
+ * @param channels - Number of channels
+ * @param isFinal - Whether this is the final chunk
+ * @returns Audio chunk metadata
+ */
+export function createAudioChunkMetadata(
+  arrayBuffer: ArrayBuffer,
+  chunkIndex: number,
+  sampleRate: number = 16000,
+  channels: number = 1,
+  isFinal: boolean = false
+) {
+  const audioData = arrayBufferToBase64(arrayBuffer)
+  const duration = calculateAudioDuration(arrayBuffer, sampleRate, channels)
   
-  try {
-    // Validate input
-    if (!webmBlob || webmBlob.size === 0) {
-      throw new Error('Empty or invalid audio blob')
-    }
-    
-    if (webmBlob.size < 1000) {
-      throw new Error(`Audio blob too small (${webmBlob.size} bytes), likely incomplete`)
-    }
-    
-    console.log('[Audio Converter] Converting WebM blob:', {
-      size: webmBlob.size,
-      type: webmBlob.type,
-      targetSampleRate
-    })
-    
-    // PHASE 2 OPTIMIZATION: Create AudioContext with target sample rate
-    // Browser will handle high-quality resampling automatically (much better than linear interpolation)
-    // This uses proper anti-aliasing filters and polyphase resampling
-    audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
-      sampleRate: targetSampleRate
-    })
-    
-    console.log('[Audio Converter] 🎯 AudioContext created with', audioContext.sampleRate, 'Hz')
-
-    // Decode WebM blob to AudioBuffer
-    const arrayBuffer = await webmBlob.arrayBuffer()
-    
-    // Validate ArrayBuffer
-    if (arrayBuffer.byteLength === 0) {
-      throw new Error('ArrayBuffer is empty after blob conversion')
-    }
-    
-    // Check for valid WebM header (EBML signature: 0x1A 0x45 0xDF 0xA3)
-    const headerView = new Uint8Array(arrayBuffer.slice(0, 4))
-    const isValidWebM = headerView[0] === 0x1A && headerView[1] === 0x45 && 
-                        headerView[2] === 0xDF && headerView[3] === 0xA3
-    
-    if (!isValidWebM) {
-      console.warn('[Audio Converter] WebM header validation failed, attempting decode anyway')
-    }
-    
-    let audioBuffer: AudioBuffer
-    try {
-      audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-      console.log('[Audio Converter] Successfully decoded audio:', {
-        duration: audioBuffer.duration,
-        sampleRate: audioBuffer.sampleRate,
-        channels: audioBuffer.numberOfChannels,
-        length: audioBuffer.length
-      })
-    } catch (decodeError) {
-      // Enhanced error message with debugging info
-      const errorMsg = decodeError instanceof Error ? decodeError.message : 'Unknown decode error'
-      console.error('[Audio Converter] Decode failed:', {
-        error: errorMsg,
-        blobSize: webmBlob.size,
-        bufferSize: arrayBuffer.byteLength,
-        hasValidHeader: isValidWebM,
-        headerHex: Array.from(headerView).map(b => b.toString(16).padStart(2, '0')).join(' ')
-      })
-      throw new Error(`Failed to decode WebM audio (size: ${webmBlob.size}B). Possible causes: incomplete audio container, corrupted data, or unsupported codec. Try speaking longer or check microphone.`)
-    }
-
-    // Get audio data (convert to mono if stereo)
-    let audioData: Float32Array
-    if (audioBuffer.numberOfChannels > 1) {
-      // Mix down to mono
-      const left = audioBuffer.getChannelData(0)
-      const right = audioBuffer.getChannelData(1)
-      audioData = new Float32Array(left.length)
-      for (let i = 0; i < left.length; i++) {
-        audioData[i] = (left[i] + right[i]) / 2
-      }
-    } else {
-      audioData = audioBuffer.getChannelData(0)
-    }
-
-    // PHASE 2 OPTIMIZATION: No manual resampling needed!
-    // AudioContext was created with targetSampleRate, so audioBuffer.sampleRate === targetSampleRate
-    // Browser already did high-quality resampling during decodeAudioData()
-    const finalAudioData = audioData
-    
-    // Verify sample rate (should always match now)
-    if (audioBuffer.sampleRate !== targetSampleRate) {
-      console.warn(
-        `[Audio Converter] ⚠️ Unexpected: audioBuffer sample rate (${audioBuffer.sampleRate}Hz) ` +
-        `doesn't match AudioContext (${targetSampleRate}Hz). This shouldn't happen.`
-      )
-    } else {
-      console.log(
-        `[Audio Converter] ✅ Audio already at target sample rate (${targetSampleRate}Hz). ` +
-        `No manual resampling needed!`
-      )
-    }
-
-    // Convert Float32Array to Int16Array (WAV uses 16-bit PCM)
-    const int16Data = new Int16Array(finalAudioData.length)
-    for (let i = 0; i < finalAudioData.length; i++) {
-      // Clamp to [-1, 1] and convert to 16-bit integer
-      const s = Math.max(-1, Math.min(1, finalAudioData[i]))
-      int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
-    }
-
-    // Create WAV file
-    const wavBuffer = createWAVFile(int16Data, targetSampleRate)
-
-    return wavBuffer
-  } catch (error) {
-    console.error('[Audio Converter] Failed to convert WebM to WAV:', error)
-    throw new Error(`Audio conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  } finally {
-    // CRITICAL: Always close audio context to prevent resource leaks
-    if (audioContext) {
-      try {
-        await audioContext.close()
-      } catch (closeError) {
-        console.warn('[Audio Converter] Failed to close audio context:', closeError)
-      }
-    }
+  return {
+    chunk_id: chunkIndex,
+    audio_data: audioData,
+    sample_rate: sampleRate,
+    channels: channels,
+    duration: duration,
+    is_final: isFinal,
+    format: 'webm'
   }
-}
-
-/**
- * DEPRECATED (Phase 2): Manual linear resampling function
- * 
- * This function is no longer used as AudioContext now handles resampling automatically
- * with much higher quality (proper anti-aliasing, polyphase filters).
- * 
- * Previous approach:
- * - Manual linear interpolation (low quality, aliasing issues)
- * - ~40dB SNR (signal-to-noise ratio)
- * 
- * New approach (AudioContext):
- * - Browser native high-quality resampling
- * - ~80dB SNR
- * - No manual code needed
- * 
- * Kept for reference only.
- */
-/*
-function resampleAudio(
-  audioData: Float32Array,
-  originalSampleRate: number,
-  targetSampleRate: number
-): Float32Array {
-  if (originalSampleRate === targetSampleRate) {
-    return audioData
-  }
-
-  const ratio = originalSampleRate / targetSampleRate
-  const newLength = Math.round(audioData.length / ratio)
-  const result = new Float32Array(newLength)
-
-  for (let i = 0; i < newLength; i++) {
-    const srcIndex = i * ratio
-    const srcIndexInt = Math.floor(srcIndex)
-    const frac = srcIndex - srcIndexInt
-
-    // Linear interpolation
-    if (srcIndexInt + 1 < audioData.length) {
-      result[i] = audioData[srcIndexInt] * (1 - frac) + audioData[srcIndexInt + 1] * frac
-    } else {
-      result[i] = audioData[srcIndexInt]
-    }
-  }
-
-  return result
-}
-*/
-
-/**
- * Create WAV file buffer from PCM data
- * WAV format: RIFF header + fmt chunk + data chunk
- */
-function createWAVFile(pcmData: Int16Array, sampleRate: number): ArrayBuffer {
-  const numChannels = 1 // Mono
-  const bitsPerSample = 16
-  const bytesPerSample = bitsPerSample / 8
-  const blockAlign = numChannels * bytesPerSample
-  const byteRate = sampleRate * blockAlign
-  const dataSize = pcmData.length * bytesPerSample
-  const fileSize = 44 + dataSize // 44 bytes WAV header + PCM data
-
-  const buffer = new ArrayBuffer(fileSize)
-  const view = new DataView(buffer)
-
-  // RIFF chunk descriptor
-  writeString(view, 0, 'RIFF')
-  view.setUint32(4, fileSize - 8, true) // File size - 8
-  writeString(view, 8, 'WAVE')
-
-  // fmt sub-chunk
-  writeString(view, 12, 'fmt ')
-  view.setUint32(16, 16, true) // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true) // AudioFormat (1 for PCM)
-  view.setUint16(22, numChannels, true) // NumChannels
-  view.setUint32(24, sampleRate, true) // SampleRate
-  view.setUint32(28, byteRate, true) // ByteRate
-  view.setUint16(32, blockAlign, true) // BlockAlign
-  view.setUint16(34, bitsPerSample, true) // BitsPerSample
-
-  // data sub-chunk
-  writeString(view, 36, 'data')
-  view.setUint32(40, dataSize, true) // Subchunk2Size
-
-  // Write PCM data
-  const offset = 44
-  for (let i = 0; i < pcmData.length; i++) {
-    view.setInt16(offset + i * 2, pcmData[i], true)
-  }
-
-  return buffer
-}
-
-/**
- * Helper to write string to DataView
- */
-function writeString(view: DataView, offset: number, string: string): void {
-  for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i))
-  }
-}
-
-/**
- * Convert ArrayBuffer to Blob (for testing/debugging)
- */
-export function arrayBufferToBlob(buffer: ArrayBuffer, mimeType: string = 'audio/wav'): Blob {
-  return new Blob([buffer], { type: mimeType })
-}
-
-/**
- * Get audio info from WebM blob (for debugging)
- */
-export async function getAudioInfo(blob: Blob): Promise<{
-  duration: number
-  sampleRate: number
-  numberOfChannels: number
-  length: number
-}> {
-  const audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-  const arrayBuffer = await blob.arrayBuffer()
-  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-  
-  const info = {
-    duration: audioBuffer.duration,
-    sampleRate: audioBuffer.sampleRate,
-    numberOfChannels: audioBuffer.numberOfChannels,
-    length: audioBuffer.length
-  }
-  
-  await audioContext.close()
-  return info
 }

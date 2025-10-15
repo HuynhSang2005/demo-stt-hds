@@ -112,14 +112,17 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     onError,
     onVolumeChange,
     onPermissionChange,
-    chunkDuration = 1000, // 1 second chunks for lower latency
+    chunkDuration = 2000, // 2 second chunks for better efficiency and lower overhead
     enableVolumeDetection = true,
     maxRecordingTime = 300000,
-    autoStart = false,
+    autoStart = false, // TODO: Implement auto-start functionality
     deviceId,
     config: customConfig = {}
   } = options
 
+  // TODO: Implement auto-start functionality
+  // console.log('AutoStart option:', autoStart) // Removed to reduce log spam
+  
   // Merge custom config with defaults
   const config: AudioRecorderConfig = useMemo(() => ({
     ...DEFAULT_VIETNAMESE_STT_CONFIG,
@@ -142,6 +145,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
   const [selectedDevice, setSelectedDevice] = useState<MediaDeviceInfo | null>(null)
   const [error, setError] = useState<AudioError | null>(null)
   const [permissionGranted, setPermissionGranted] = useState(false)
+  
+  // Debug permission state changes
+  useEffect(() => {
+    console.log('[useAudioRecorder] 🔄 Permission state changed:', permissionGranted)
+  }, [permissionGranted])
 
   // Refs for audio context and timers
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -150,6 +158,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
   const analyserRef = useRef<AnalyserNode | null>(null)
   const recordingTimerRef = useRef<number | null>(null)
   const volumeDetectionRef = useRef<number | null>(null)
+  const volumeDetectionStateRef = useRef<{ lastUpdate: number }>({ lastUpdate: 0 })
   const startTimeRef = useRef<number>(0)
   const chunkIndexRef = useRef<number>(0)
   const isRecordingRef = useRef<boolean>(false) // Ref for volume detection closure to avoid stale state
@@ -196,21 +205,22 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       const constraints: MediaStreamConstraints = {
         audio: {
           deviceId: preferredDeviceId ? { exact: preferredDeviceId } : undefined,
-          // Request 16kHz native sample rate to match Wav2Vec2 model requirements
-          // Browser may fall back to 48kHz if 16kHz is not supported
+          // Optimized for PhoWhisper model requirements
           sampleRate: {
-            ideal: 16000,  // Target for Wav2Vec2 model
+            ideal: 16000,  // Required by PhoWhisper
             min: 16000,    // Minimum acceptable
             max: 48000     // Maximum acceptable
           },
           channelCount: {
-            ideal: config.format.channels,
-            max: config.format.channels
+            ideal: 1,      // Mono required by PhoWhisper
+            max: 1         // Force mono
           },
-          // Audio processing settings optimized for speech
-          echoCancellation: false,  // Changed from true - reduces amplitude
-          noiseSuppression: false,  // Changed from true - kills voice activity
-          autoGainControl: false,   // Changed from true - Bluetooth has its own AGC
+          // Audio processing settings optimized for Vietnamese speech recognition
+          echoCancellation: true,   // Better for noisy environments
+          noiseSuppression: true,   // Reduce background noise
+          autoGainControl: true,    // Normalize volume levels
+          // Additional constraints for better quality
+          sampleSize: 16          // 16-bit samples
         },
         video: false,
       }
@@ -285,7 +295,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       onPermissionChange?.(false)
       return null
     }
-  }, [config, onError, onPermissionChange])
+  }, [onError, onPermissionChange])
 
   /**
    * Setup audio context for volume detection
@@ -325,50 +335,73 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
       console.log('[AudioRecorder] Audio context initialized for stream:', stream.id)
 
-      // Start volume detection
+      // Start volume detection with proper time-domain analysis
       const detectVolume = () => {
-        if (!analyserRef.current) return
+        if (!analyserRef.current) {
+          console.log('[AudioRecorder] Volume detection stopped - no analyser')
+          return
+        }
 
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
-        analyserRef.current.getByteFrequencyData(dataArray)
+        // FIX: Use TIME-DOMAIN data for better RMS calculation
+        const bufferLength = analyserRef.current.fftSize
+        const dataArray = new Uint8Array(bufferLength)
+        analyserRef.current.getByteTimeDomainData(dataArray)
 
-        // Calculate RMS volume
+        // Calculate RMS volume from time-domain data (more accurate)
         let sum = 0
         for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i]
+          // Convert from Uint8 (0-255, centered at 128) to amplitude (-128 to +127)
+          const amplitude = dataArray[i] - 128
+          sum += amplitude * amplitude
         }
         const rms = Math.sqrt(sum / dataArray.length)
         const volume = Math.min(1, rms / 128) // Normalize to 0-1
 
-        // Debug: Log volume updates (5% sample rate)
-        if (import.meta.env.DEV && Math.random() < 0.05) {
-          console.log(`[Hook] 🎤 Volume detected: RMS=${rms.toFixed(2)}, normalized=${(volume * 100).toFixed(1)}%`)
+        // FIX: Throttle volume updates to prevent UI lag
+        // Only update every 100ms (10fps) instead of 60fps
+        const now = Date.now()
+        const lastUpdate = volumeDetectionStateRef.current.lastUpdate
+        const shouldUpdate = (now - lastUpdate) > 100
+        
+        if (shouldUpdate) {
+          // Debug: Log volume updates (1% sample rate to reduce spam)
+          if (import.meta.env.DEV && Math.random() < 0.01) {
+            console.log(`[Hook] 🎤 Volume detected: RMS=${rms.toFixed(2)}, normalized=${(volume * 100).toFixed(1)}%`)
+          }
+
+          setCurrentVolume(volume)
+          onVolumeChange?.(volume)
+          
+          // Store last update time in separate ref
+          volumeDetectionStateRef.current.lastUpdate = now
         }
 
-        setCurrentVolume(volume)
-        onVolumeChange?.(volume)
-
-        // Use ref instead of state to avoid stale closure in timeout callback
-        if (isRecordingRef.current) {
-          volumeDetectionRef.current = window.setTimeout(detectVolume, 100)
+        // FIX: Always continue detection loop while we have a stream
+        // Volume detection should work immediately when AudioContext is setup
+        if (mediaStreamRef.current && audioContextRef.current) {
+          volumeDetectionRef.current = window.requestAnimationFrame(detectVolume)
+        } else {
+          console.log('[AudioRecorder] Stopping volume detection - no stream or audio context')
         }
       }
 
+      // Start volume detection immediately
+      console.log('[AudioRecorder] Starting volume detection loop...')
+      // Initialize volume detection state
+      volumeDetectionStateRef.current.lastUpdate = 0
       detectVolume()
     } catch (err) {
       console.warn('Failed to setup audio context for volume detection:', err)
     }
   }, [enableVolumeDetection, onVolumeChange])
 
-  /**
-   * Debug logging helper (defined inline for VAD)
-   */
-  const debugLog = useCallback((message: string) => {
-    // Only log in development mode (Vite sets import.meta.env.DEV)
-    if (import.meta.env.DEV) {
-      console.log(`[AudioRecorder] ${message}`)
-    }
-  }, [])
+  // Debug logging helper disabled with VAD
+  // const debugLog = useCallback((message: string) => {
+  //   // Only log in development mode (Vite sets import.meta.env.DEV)
+  //   if (import.meta.env.DEV) {
+  //     console.log(`[AudioRecorder] ${message}`)
+  //   }
+  // }, [])
 
   /**
    * Check if audio chunk contains voice activity (VAD)
@@ -377,44 +410,45 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
    * Uses time-domain analysis (waveform amplitude) for better detection
    * of high-pitch voices and abnormal tones compared to frequency-domain methods
    */
-  const checkVoiceActivity = useCallback((): boolean => {
-    if (!analyserRef.current) return true // If no analyser, process all chunks
+  // VAD function disabled for session mode to ensure complete WebM containers
+  // const checkVoiceActivity = useCallback((): boolean => {
+  //   if (!analyserRef.current) return true // If no analyser, process all chunks
 
-    // Use TIME-DOMAIN data (waveform) instead of FREQUENCY-DOMAIN
-    // This is more reliable for detecting ALL types of voices
-    const bufferLength = analyserRef.current.fftSize
-    const dataArray = new Uint8Array(bufferLength)
-    analyserRef.current.getByteTimeDomainData(dataArray) // Changed from getByteFrequencyData!
+  //   // Use TIME-DOMAIN data (waveform) instead of FREQUENCY-DOMAIN
+  //   // This is more reliable for detecting ALL types of voices
+  //   const bufferLength = analyserRef.current.fftSize
+  //   const dataArray = new Uint8Array(bufferLength)
+  //   analyserRef.current.getByteTimeDomainData(dataArray) // Changed from getByteFrequencyData!
 
-    // Calculate RMS (Root Mean Square) energy from waveform amplitude
-    let sum = 0
-    let maxAmplitude = 0
-    for (let i = 0; i < dataArray.length; i++) {
-      // Convert from Uint8 (0-255, centered at 128) to amplitude (-128 to +127)
-      const amplitude = dataArray[i] - 128
-      sum += amplitude * amplitude
-      maxAmplitude = Math.max(maxAmplitude, Math.abs(amplitude))
-    }
-    let rms = Math.sqrt(sum / dataArray.length)
+  //   // Calculate RMS (Root Mean Square) energy from waveform amplitude
+  //   let sum = 0
+  //   let maxAmplitude = 0
+  //   for (let i = 0; i < dataArray.length; i++) {
+  //     // Convert from Uint8 (0-255, centered at 128) to amplitude (-128 to +127)
+  //     const amplitude = dataArray[i] - 128
+  //     sum += amplitude * amplitude
+  //     maxAmplitude = Math.max(maxAmplitude, Math.abs(amplitude))
+  //   }
+  //   let rms = Math.sqrt(sum / dataArray.length)
     
-    // Apply gain compensation for low-amplitude Bluetooth audio
-    // Bluetooth headsets often have aggressive noise suppression that reduces signal levels
-    // Amplify the RMS by 2x to compensate for audio processing artifacts
-    rms = rms * 2.0
+  //   // Apply gain compensation for low-amplitude Bluetooth audio
+  //   // Bluetooth headsets often have aggressive noise suppression that reduces signal levels
+  //   // Amplify the RMS by 2x to compensate for audio processing artifacts
+  //   rms = rms * 2.0
 
-    // ULTRA-SENSITIVE threshold for Bluetooth headsets with heavy audio processing
-    // Original: 15 (too high) → 5 (still too high for BT) → 3 (catches everything)
-    // With 2x gain compensation, effective threshold is ~1.5 raw RMS
-    const VAD_THRESHOLD = 3
-    const hasVoice = rms > VAD_THRESHOLD
+  //   // ULTRA-SENSITIVE threshold for Bluetooth headsets with heavy audio processing
+  //   // Original: 15 (too high) → 5 (still too high for BT) → 3 (catches everything)
+  //   // With 2x gain compensation, effective threshold is ~1.5 raw RMS
+  //   const VAD_THRESHOLD = 3
+  //   const hasVoice = rms > VAD_THRESHOLD
     
-    // Additional check: if max amplitude is high, definitely has voice
-    const hasHighPeak = maxAmplitude > 10
-    const finalHasVoice = hasVoice || hasHighPeak
+  //   // Additional check: if max amplitude is high, definitely has voice
+  //   const hasHighPeak = maxAmplitude > 10
+  //   const finalHasVoice = hasVoice || hasHighPeak
 
-    debugLog(`VAD check: RMS=${rms.toFixed(2)} (max=${maxAmplitude.toFixed(1)}), hasVoice=${finalHasVoice}`)
-    return finalHasVoice
-  }, [debugLog])
+  //   debugLog(`VAD check: RMS=${rms.toFixed(2)} (max=${maxAmplitude.toFixed(1)}), hasVoice=${finalHasVoice}`)
+  //   return finalHasVoice
+  // }, [debugLog])
 
   /**
    * Create audio chunk from blob data
@@ -467,7 +501,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     }
 
     if (volumeDetectionRef.current) {
-      clearTimeout(volumeDetectionRef.current)
+      cancelAnimationFrame(volumeDetectionRef.current)
       volumeDetectionRef.current = null
     }
 
@@ -475,6 +509,8 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     setRecordingDuration(0)
     setIsRecording(false)
     setProcessingState('inactive')
+    
+    console.log('[AudioRecorder] Recording stopped - volume reset to 0')
   }, [])
 
   /**
@@ -514,7 +550,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
       mediaStreamRef.current = stream
 
-      // Setup audio context for volume detection
+      // Setup audio context for volume detection immediately
       setupAudioContext(stream)
       
       // BUG FIX (Bug 2): Cleanup old MediaRecorder before creating new one
@@ -547,14 +583,20 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         console.log(`[AudioRecorder] Using fallback format: ${mimeType}`)
       }
 
-      // Create MediaRecorder with Vietnamese STT optimized settings
+      // PERFORMANCE: Create MediaRecorder with optimized settings for smaller files
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType,
-        audioBitsPerSecond: 128000,
+        audioBitsPerSecond: 64000,  // Reduced from 128k to 64k for smaller files
       })
 
       // Setup event handlers
       mediaRecorder.ondataavailable = (event) => {
+        console.log('[useAudioRecorder] ondataavailable event:', {
+          hasData: !!event.data,
+          dataSize: event.data?.size || 0,
+          dataType: event.data?.type || 'unknown'
+        })
+        
         if (event.data && event.data.size > 0) {
           // FIX: DISABLE VAD for session mode to ensure complete WebM container
           // VAD was skipping chunks, causing incomplete WebM blobs that FFmpeg can't decode
@@ -571,6 +613,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
           const chunk = createAudioChunk(event.data)
           
           setAudioChunks(prev => [...prev, chunk])
+        console.log('[useAudioRecorder] Calling onAudioChunk callback with chunk:', {
+          chunkSize: chunk.data instanceof Blob ? chunk.data.size : chunk.data.byteLength,
+          chunkType: chunk.data instanceof Blob ? chunk.data.type : 'ArrayBuffer',
+          timestamp: chunk.timestamp
+        })
           onAudioChunk?.(chunk)
         }
       }
@@ -622,6 +669,8 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       // FIX: Start recording WITHOUT chunking for session mode
       // Chunking (timeslice) creates fragmented WebM that FFmpeg can't decode when combined
       // Record entire audio in one chunk for valid WebM container
+      // CRITICAL: Use single chunk to avoid WebM corruption from multiple chunks
+      // PERFORMANCE: Use optimized WebSocket endpoint for better speed
       mediaRecorder.start()  // No timeslice = single complete WebM file
 
     } catch (err) {
@@ -640,13 +689,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     deviceId,
     selectedDevice,
     config,
-    chunkDuration,
     maxRecordingTime,
     getMediaStream,
     setupAudioContext,
     createAudioChunk,
-    checkVoiceActivity,
-    debugLog,
     onAudioChunk,
     onRecordingStart,
     onRecordingStop,
@@ -686,32 +732,94 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
    * Cleanup resources
    */
   const cleanup = useCallback((): void => {
-    stopRecording()
+    console.log('[AudioRecorder] Starting enhanced cleanup...')
+    
+    // Stop recording if active
+    if (isRecording) {
+      stopRecording()
+    }
+    
+    // Stop MediaRecorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      console.log('[AudioRecorder] Stopping MediaRecorder')
+      mediaRecorderRef.current.stop()
+    }
+    
+    // Stop all tracks in MediaStream
+    if (mediaStreamRef.current) {
+      console.log('[AudioRecorder] Stopping MediaStream tracks')
+      mediaStreamRef.current.getTracks().forEach(track => {
+        track.stop()
+        track.enabled = false
+      })
+      mediaStreamRef.current = null
+    }
+    
+    // Close AudioContext
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      console.log('[AudioRecorder] Closing AudioContext')
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    
+    // Stop volume detection
+    if (volumeDetectionRef.current) {
+      console.log('[AudioRecorder] Stopping volume detection...')
+      cancelAnimationFrame(volumeDetectionRef.current)
+      volumeDetectionRef.current = null
+    }
+    
+    // Reset volume detection state
+    volumeDetectionStateRef.current.lastUpdate = 0
+    
+    // Clear recording timer
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+    
+    // Clear refs
+    mediaRecorderRef.current = null
+    analyserRef.current = null
+    startTimeRef.current = 0
+    chunkIndexRef.current = 0
+    isRecordingRef.current = false
+    
+    // Reset state
     setAudioChunks([])
     setError(null)
     setAvailableDevices([])
     setSelectedDevice(null)
-  }, [stopRecording])
+    setCurrentVolume(0)
+    setRecordingDuration(0)
+    
+    console.log('[AudioRecorder] Enhanced cleanup completed')
+  }, [stopRecording, isRecording])
 
   // FIX INFINITY LOOP: Auto-detect audio devices ONCE on mount only
   // Use ref to ensure this only runs once, preventing infinite loops
   const hasDetectedDevicesRef = useRef(false)
   
   useEffect(() => {
+    console.log('[useAudioRecorder] 🚀 useEffect for device detection triggered')
     // Skip if already detected or component unmounting
     if (hasDetectedDevicesRef.current) {
+      console.log('[useAudioRecorder] ⏭️ Skipping device detection - already detected')
       return
     }
     
     hasDetectedDevicesRef.current = true
     let isMounted = true
+    console.log('[useAudioRecorder] ✅ Starting device detection process')
     
     const detectDevices = async () => {
       try {
         console.log('[useAudioRecorder] Auto-detecting audio devices (ONCE)...')
+        console.log('[useAudioRecorder] 🔍 About to request getUserMedia...')
         
         // Request permission first to get device labels
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        console.log('[useAudioRecorder] ✅ getUserMedia successful, stream:', stream.id)
         
         if (!isMounted) {
           stream.getTracks().forEach(track => track.stop())
@@ -719,10 +827,12 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         }
         
         // Enumerate devices after permission granted
+        console.log('[useAudioRecorder] 🔍 Enumerating devices...')
         const allDevices = await navigator.mediaDevices.enumerateDevices()
         const audioInputs = allDevices.filter(device => device.kind === 'audioinput')
         
-        console.log('[useAudioRecorder] Found audio devices:', audioInputs.length)
+        console.log('[useAudioRecorder] ✅ Found audio devices:', audioInputs.length)
+        console.log('[useAudioRecorder] 📱 Audio devices:', audioInputs.map(d => d.label))
         
         if (isMounted) {
           setAvailableDevices(audioInputs)
@@ -735,6 +845,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
           }
           
           setPermissionGranted(true)
+          console.log('[useAudioRecorder] ✅ Permission granted - setPermissionGranted(true) called')
           // Use optional callback without adding to dependencies
           if (onPermissionChange) {
             onPermissionChange(true)
@@ -742,9 +853,16 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         }
         
         // Stop the permission stream (we'll create new one when recording)
+        console.log('[useAudioRecorder] 🧹 Stopping permission stream...')
         stream.getTracks().forEach(track => track.stop())
+        console.log('[useAudioRecorder] ✅ Device detection completed successfully')
       } catch (err) {
-        console.error('[useAudioRecorder] Device detection failed:', err)
+        console.error('[useAudioRecorder] ❌ Device detection failed:', err)
+        console.error('[useAudioRecorder] ❌ Error details:', {
+          name: err instanceof Error ? err.name : 'Unknown',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined
+        })
         
         if (isMounted) {
           const audioError = createAudioError(
@@ -755,6 +873,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
           
           setError(audioError)
           setPermissionGranted(false)
+          console.log('[useAudioRecorder] ❌ Permission denied - setPermissionGranted(false) called')
           // Use optional callbacks without adding to dependencies
           if (onPermissionChange) {
             onPermissionChange(false)
@@ -771,23 +890,31 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     return () => {
       isMounted = false
     }
-  }, []) // Empty deps - run ONCE on mount only
+  }, []) // Empty dependency array - run once on mount only
 
-  // Cleanup on unmount
+  // Enhanced cleanup on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
+      console.log('[useAudioRecorder] Component unmounting, performing cleanup...')
+      
       // Direct cleanup without circular dependencies
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        console.log('[useAudioRecorder] Stopping MediaRecorder on unmount')
         mediaRecorderRef.current.stop()
       }
       
       // Stop all tracks
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop())
+        console.log('[useAudioRecorder] Stopping MediaStream tracks on unmount')
+        mediaStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          track.enabled = false
+        })
       }
       
       // Close audio context
-      if (audioContextRef.current) {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        console.log('[useAudioRecorder] Closing AudioContext on unmount')
         audioContextRef.current.close()
       }
       
@@ -797,8 +924,13 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       }
       
       if (volumeDetectionRef.current) {
-        clearTimeout(volumeDetectionRef.current)
+        cancelAnimationFrame(volumeDetectionRef.current)
       }
+      
+      // Reset volume detection state
+      volumeDetectionStateRef.current.lastUpdate = 0
+      
+      console.log('[useAudioRecorder] Cleanup on unmount completed')
     }
   }, []) // Empty dependency array for unmount cleanup
 
@@ -824,6 +956,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
     availableDevices,
     selectedDevice,
     selectDevice,
+    getAvailableDevices,
     
     // Error handling
     error,
