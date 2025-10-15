@@ -1,135 +1,166 @@
-# ============================================
 # Python
-# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
 env/
 ENV/
-.venv
+env.bak/
+venv.bak/
+.venv/
 
-# ============================================
-# Node.js / Frontend
-# ============================================
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
+lerna-debug.log*
 
-# Build outputs
-dist/
-dist-ssr/
-*.local
+# Frontend build
+frontend/dist/
+frontend/build/
 
-# ============================================
-# AI Models (Large files - ~2.5GB total)
-# ============================================
-phobert-vi-comment-4class/
-PhoWhisper-small/
-wav2vec2-base-vietnamese-250h/
-models/
+# Logs
+*.log
+logs/
+backend/logs/
 
-# ONNX exported models (if any)
-*.onnx
-
-# ============================================
-# Environment & Secrets
-# ============================================
+# Environment variables
 .env
 .env.local
-.env.*.local
-*.pem
-*.key
+.env.development.local
+.env.test.local
+.env.production.local
 
-# ============================================
-# Logs
-# ============================================
-logs/
-*.log
-dev-debug.log
-*.log.*
-
-# ============================================
-# IDE & Editors
-# ============================================
-.idea/
-.vscode/
-.cursor/
-.serena/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# ============================================
-# OS Specific
-# ============================================
-.DS_Store
-Thumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# ============================================
-# Testing & Coverage
-# ============================================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.hypothesis/
-coverage/
-
-# ============================================
 # Temporary files
-# ============================================
 *.tmp
 *.temp
-*.bak
-*.swp
-*~.nib
+temp/
+tmp/
 
-# ============================================
-# Audio test files (large)
-# ============================================
+# Model files (too large for git)
+*.bin
+*.safetensors
+# *.onnx  # Allow ONNX files (they're smaller and optimized)
+models/
+
+# Audio files
 *.wav
-*.webm
-*.ogg
 *.mp3
-*.m4a
-# Except test audio files in tests/
-!tests/test_audio/*.wav
-!tests/test_audio/*.webm
+*.webm
+*.opus
 
-# ============================================
-# Project specific
-# ============================================
-# Uncomment if you want to track tasks
-# tasks.json
-# tasks/
+# Test coverage
+coverage/
+.nyc_output
+htmlcov/
 
-# Generated client code (OpenAPI)
-frontend/src/client/
+# Cache
+.cache/
+.parcel-cache/
 
-# Metrics and reports
-.taskmaster/reports/
-metrics/
+# Jupyter Notebooks
+.ipynb_checkpoints
 
-# Database files (if any in future)
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Security
+*.pem
+*.key
+*.crt
+
+# Database
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Development files
+test_audio_*.wav
+debug_*.log
+performance_*.json
+
+# ONNX model cache (optional - can be regenerated)
+backend/app/onnx_models/*.onnx
+
+# Hugging Face cache (will be downloaded automatically)
+.cache/huggingface/
+
+# PyTorch cache
+.cache/torch/
+
+# Local development overrides
+local_config.py
+dev_settings.py
