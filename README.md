@@ -21,7 +21,7 @@
 
 - 🎤 **Nhận dạng giọng nói tiếng Việt thời gian thực** sử dụng mô hình PhoWhisper-small
 - 🛡️ **Phát hiện nội dung độc hại** với phân tích sentiment 4 lớp
-- ⚡ **Tối ưu ONNX** tăng hiệu suất 2-3 lần
+- ⚡ **Tối ưu PyTorch** với caching thông minh và fallback
 - 🔄 **Giao tiếp WebSocket** cho streaming độ trễ thấp
 - 📊 **Hiển thị độ tin cậy** với phân tích chi tiết
 - ⚠️ **Tô sáng thông minh** nội dung không phù hợp
@@ -36,6 +36,9 @@ cd vietnamese-stt-demo
 
 # 2. Chạy setup tự động (tải models + cài dependencies)
 python setup.py
+
+# Hoặc setup models riêng biệt (khuyến nghị):
+python setup_models.py  # Download models với PyTorch optimization
 
 # 3. Khởi động demo
 python start.py
@@ -60,9 +63,29 @@ python start.py
 ### Setup Tự Động (Khuyến nghị)
 
 ```bash
-# Setup hoàn chỉnh: backend + frontend + models + chuyển đổi ONNX
+# Bước 1: Setup backend + frontend
+# Bước 2: Setup models + ONNX optimization: backend + frontend + models + chuyển đổi ONNX
 python setup.py
 ```
+
+### Setup Models Riêng Biệt (Khuyến nghị)
+
+Script `setup_models.py` tải và optimize models riêng biệt:
+
+```bash
+# Download và optimize models (PyTorch với fallback)
+python setup_models.py
+
+# Sau đó setup backend + frontend
+python setup.py
+```
+
+**Lợi ích của setup riêng:**
+- ✅ Download với retry logic và resume capability
+- ✅ Verification chi tiết từng model
+- ✅ PyTorch optimization với fallback tự động
+- ✅ Debug dễ dàng hơn khi có lỗi
+- ✅ Không phụ thuộc vào ONNX conversion
 
 ### Setup Thủ Công
 
@@ -72,6 +95,9 @@ python setup.py
 ```bash
 cd backend
 pip install -r requirements.txt
+
+# Copy environment file (optional, defaults work)
+cp .env.example .env
 
 # Khởi động backend
 python start.py
@@ -92,6 +118,27 @@ npm run dev
 
 </details>
 
+### 🔧 Cấu Hình Cho Máy Mới
+
+**Quan trọng cho setup trên máy tính khác:**
+
+1. **Thứ tự setup đúng**: `python setup.py` → `python setup_models.py` → `python start.py`
+
+2. **Đường dẫn models**: Models được lưu trong thư mục gốc project và được tham chiếu tương đối từ backend:
+   ```
+   ASR_MODEL_PATH=../PhoWhisper-small
+   CLASSIFIER_MODEL_PATH=../phobert-vi-comment-4class
+   ```
+
+3. **Kích thước models**: ~1.6GB tổng cộng, đảm bảo kết nối internet tốt
+
+4. **Dependencies cần thiết**:
+   - Python 3.8+
+   - Node.js 18+
+   - FFmpeg (cho xử lý audio WebM/Opus)
+
+5. **File cấu hình**: Copy `backend/.env.example` thành `backend/.env` (tùy chọn, defaults hoạt động tốt)
+
 ## 📊 Tính Năng
 
 ### 🎤 Nhận Dạng Giọng Nói
@@ -107,10 +154,11 @@ npm run dev
 - **Chấm điểm độ tin cậy**: Phân tích chi tiết dự đoán
 
 ### ⚡ Tối Ưu Hiệu Suất
-- **ONNX Runtime**: Nhanh hơn 2-3 lần so với PyTorch
+- **PyTorch Models**: Sử dụng PyTorch/SafeTensors với tối ưu hóa built-in
 - **Cache mô hình**: Tải thông minh với cơ chế fallback
 - **Xử lý bất đồng bộ**: Pipeline audio không chặn
 - **Tối ưu bộ nhớ**: Quản lý mô hình hiệu quả
+- **ONNX Support**: Đang phát triển (hiện tại sử dụng PyTorch cho độ ổn định tối đa)
 
 ### 🎨 Trải Nghiệm Người Dùng
 - **Waveform thời gian thực**: Giám sát mức âm thanh trực quan
@@ -138,6 +186,13 @@ graph TB
 ```
 
 ## 🤖 Mô Hình AI
+
+### Model Format Support
+- **PyTorch models**: `pytorch_model.bin` (traditional format)
+- **SafeTensors models**: `model.safetensors` (modern, safer format)
+- Script tự động detect và handle cả hai format
+- PhoWhisper-small: sử dụng PyTorch format
+- PhoBERT Classifier: sử dụng SafeTensors format
 
 ### PhoWhisper-small
 - **Nguồn**: [VinAI Research](https://huggingface.co/vinai/PhoWhisper-small)
@@ -177,6 +232,7 @@ vietnamese-stt-demo/
 ├── 📄 HUONG_DAN_SU_DUNG.md   # Hướng dẫn sử dụng chi tiết
 ├── 📄 CONTRIBUTING.md        # Hướng dẫn đóng góp
 ├── 🚀 setup.py               # Script setup tự động
+├── 🤖 setup_models.py        # Script setup models riêng biệt
 ├── 🎯 start.py               # Launcher khởi động nhanh
 │
 ├── 🔧 backend/               # FastAPI backend
@@ -227,9 +283,25 @@ Khi đang chạy, truy cập http://localhost:8000/docs để xem tài liệu AP
 <details>
 <summary><b>Mô Hình Không Tải Được</b></summary>
 
-1. Chạy `python setup.py` để tải models
-2. Kiểm tra kết nối internet để tải từ Hugging Face
-3. Xác minh đủ dung lượng ổ đĩa (~2GB cho models)
+1. Thử setup models riêng: `python setup_models.py`
+2. Nếu vẫn lỗi, chạy `python setup.py` để tải models
+3. Kiểm tra kết nối internet để tải từ Hugging Face
+4. Xác minh đủ dung lượng ổ đĩa (~2GB cho models)
+5. **Kiểm tra đường dẫn models** (quan trọng cho máy mới):
+   ```bash
+   python -c "
+   import sys
+   sys.path.insert(0, 'backend')
+   from app.core.config import Settings
+   settings = Settings()
+   paths = settings.get_model_paths()
+   print('ASR Path:', paths['asr'])
+   print('ASR Exists:', paths['asr'].exists())
+   print('Classifier Path:', paths['classifier'])
+   print('Classifier Exists:', paths['classifier'].exists())
+   "
+   ```
+6. Xóa cache nếu cần: `rm -rf PhoWhisper-small phobert-vi-comment-4class`
 
 </details>
 

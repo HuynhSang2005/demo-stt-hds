@@ -19,10 +19,10 @@ def main():
         print("   cd backend && python start.py")
         sys.exit(1)
     
-    # Check models
-    models = ["PhoWhisper-small", "phobert-vi-comment-4class"]
+    # Check models (models are in parent directory)
+    models = ["../PhoWhisper-small", "../phobert-vi-comment-4class"]
     missing_models = []
-    
+
     for model in models:
         if not Path(model).exists():
             missing_models.append(model)

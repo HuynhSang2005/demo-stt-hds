@@ -68,7 +68,7 @@ class EnhancedONNXOptimizer:
         self.app_logger = AppLogger("onnx_optimizer_app")
         
         # ONNX models directory (separate from original models)
-        self.onnx_models_dir = Path("backend/app/onnx_models")
+        self.onnx_models_dir = Path("app/onnx_models")
         self.onnx_models_dir.mkdir(exist_ok=True)
         
         # Model configurations
@@ -80,7 +80,7 @@ class EnhancedONNXOptimizer:
                 "model_type": "whisper"
             },
             "phobert": {
-                "input_shape": (1, 512),       # Tokenized text
+                "input_shape": (1, 258),       # Tokenized text (PhoBERT max length)
                 "output_names": ["logits"],
                 "opset_version": 17,
                 "model_type": "bert"
@@ -187,11 +187,11 @@ class EnhancedONNXOptimizer:
             
             # Create dummy input based on model type
             if config['model_type'] == 'whisper':
-                # Whisper expects mel spectrogram
-                dummy_input = torch.randn(*config['input_shape'])
+                # Skip ONNX conversion for Whisper models - too complex
+                raise ONNXConversionError("Whisper models are not supported for ONNX conversion due to encoder-decoder complexity")
             elif config['model_type'] == 'bert':
-                # BERT expects tokenized input
-                dummy_input = torch.randint(0, 30000, config['input_shape'], dtype=torch.long)
+                # Skip ONNX conversion for BERT models - classification heads are complex
+                raise ONNXConversionError("BERT classification models are not supported for ONNX conversion due to complex classification heads")
             else:
                 dummy_input = torch.randn(*config['input_shape'])
             

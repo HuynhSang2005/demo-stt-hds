@@ -50,10 +50,34 @@ python setup.py
 
 Lệnh này sẽ tự động:
 - ✅ Cài đặt tất cả dependencies Python
-- ✅ Cài đặt tất cả dependencies Node.js  
+- ✅ Cài đặt tất cả dependencies Node.js
 - ✅ Tải mô hình AI từ Hugging Face
-- ✅ Chuyển đổi mô hình sang ONNX để tăng hiệu suất
+- ✅ Optimize mô hình PyTorch với fallback tự động
 - ✅ Xác minh mọi thứ hoạt động
+
+### Setup Models Riêng Biệt (Khuyến nghị)
+
+Models setup là bước riêng biệt và bắt buộc:
+
+```bash
+# Bước 1: Download và optimize models (có thể chạy riêng)
+python setup_models.py
+
+# Bước 2: Setup backend + frontend
+python setup.py
+
+# Bước 3: Khởi động demo
+python start.py
+```
+
+**Lợi ích của `setup_models.py`:**
+- 🔄 **Retry logic**: Tự động retry khi download thất bại
+- 📥 **Resume download**: Tiếp tục download nếu bị gián đoạn
+- ✅ **Verification**: Kiểm tra tính toàn vẹn của models
+- 🔄 **Multi-format support**: Hỗ trợ cả PyTorch và SafeTensors
+- ⚡ **PyTorch optimization**: Sử dụng PyTorch với fallback tự động
+- 📊 **Progress tracking**: Hiển thị tiến trình chi tiết
+- 🐛 **Better debugging**: Error messages rõ ràng hơn
 
 ### Khởi Động Demo
 
@@ -81,7 +105,7 @@ snapshot_download('vinai/PhoWhisper-small', local_dir='../PhoWhisper-small')
 snapshot_download('vanhai123/phobert-vi-comment-4class', local_dir='../phobert-vi-comment-4class')
 "
 
-# Chuyển đổi sang ONNX (tùy chọn nhưng khuyến nghị)
+# Optimize models với PyTorch (tùy chọn nhưng khuyến nghị)
 python convert_models_to_onnx.py
 
 # Khởi động backend
@@ -256,9 +280,20 @@ const { isConnected, connectionStatus } = useSessionWebSocket(wsUrl, {
 
 **Giải pháp**:
 ```bash
-# Tải lại mô hình
+# Phương pháp 1: Sử dụng setup models riêng (khuyến nghị)
+python setup_models.py
+
+# Phương pháp 2: Setup đầy đủ
 rm -rf PhoWhisper-small phobert-vi-comment-4class
 python setup.py
+
+# Phương pháp 3: Download thủ công
+cd backend
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('vinai/PhoWhisper-small', local_dir='../PhoWhisper-small')
+snapshot_download('vanhai123/phobert-vi-comment-4class', local_dir='../phobert-vi-comment-4class')
+"
 
 # Kiểm tra dung lượng ổ đĩa (cần ~2GB cho mô hình)
 df -h
@@ -406,8 +441,12 @@ tail -f backend/logs/app.log
 
 ### Tối Ưu Backend
 
-#### Bật ONNX Runtime
+#### Bật PyTorch Optimization
 ```bash
+# Phương pháp 1: Sử dụng setup_models.py (khuyến nghị)
+python setup_models.py
+
+# Phương pháp 2: Chạy riêng model optimization
 cd backend
 python convert_models_to_onnx.py
 ```

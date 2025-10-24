@@ -12,10 +12,10 @@ from pathlib import Path
 def check_models():
     """Kiểm tra models có sẵn"""
     models = [
-        "PhoWhisper-small",
-        "phobert-vi-comment-4class"
+        "../PhoWhisper-small",
+        "../phobert-vi-comment-4class"
     ]
-    
+
     missing_models = []
     for model in models:
         model_path = Path(model)
@@ -25,7 +25,7 @@ def check_models():
             # Check if it has required files
             if not (model_path / "config.json").exists():
                 missing_models.append(model)
-    
+
     return missing_models
 
 def run_backend_dev():
