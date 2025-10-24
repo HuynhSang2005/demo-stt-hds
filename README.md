@@ -90,6 +90,27 @@ python setup.py
 ### Setup Thủ Công
 
 <details>
+<summary><b>Setup FFmpeg (Quan trọng cho Windows)</b></summary>
+
+FFmpeg là bắt buộc cho xử lý audio WebM/Opus. Trên Windows:
+
+```bash
+# Phương pháp 1: Tự động (khuyến nghị)
+python setup_ffmpeg.py
+
+# Phương pháp 2: Thủ công
+# 1. Download từ: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+# 2. Extract vào C:fmpeg
+# 3. Thêm C:fmpegin vào PATH
+# 4. Restart command prompt
+
+# Phương pháp 3: Chocolatey (nếu có)
+choco install ffmpeg
+```
+
+</details>
+
+<details>
 <summary><b>Setup Backend</b></summary>
 
 ```bash
@@ -302,6 +323,31 @@ Khi đang chạy, truy cập http://localhost:8000/docs để xem tài liệu AP
    "
    ```
 6. Xóa cache nếu cần: `rm -rf PhoWhisper-small phobert-vi-comment-4class`
+
+</details>
+
+<details>
+<summary><b>FFmpeg Không Tìm Thấy (Windows)</b></summary>
+
+**Lỗi**: `[WinError 2] The system cannot find the file specified`
+
+**Giải pháp**:
+```bash
+# Phương pháp 1: Setup tự động
+python setup_ffmpeg.py
+
+# Phương pháp 2: Download thủ công
+# 1. Download: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+# 2. Extract vào C:fmpeg
+# 3. Thêm C:fmpegin vào PATH
+# 4. Restart command prompt
+
+# Phương pháp 3: Chocolatey
+choco install ffmpeg
+
+# Kiểm tra sau khi cài đặt
+ffmpeg -version
+```
 
 </details>
 
