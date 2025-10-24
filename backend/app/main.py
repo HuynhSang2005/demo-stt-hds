@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 
     # Set torchaudio backend to ffmpeg for WebM/Opus support
     try:
-        torchaudio.set_audio_backend('ffmpeg')
+        # torchaudio.set_audio_backend('ffmpeg')
         app_logger.logger.info(
             "torchaudio_backend_set",
             backend="ffmpeg",
